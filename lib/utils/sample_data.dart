@@ -1,0 +1,353 @@
+import '../models/flight.dart';
+import '../models/trip.dart';
+import '../models/airport.dart';
+import '../models/travel_document.dart';
+
+class SampleData {
+  static final List<Trip> trips = [
+    Trip(
+      id: 'trip_001',
+      bookingReference: 'TB7K2M',
+      status: TripStatus.upcoming,
+      createdAt: DateTime.now().subtract(const Duration(days: 10)),
+      passengers: const [
+        TripPassenger(
+          firstName: 'Alex',
+          lastName: 'Johnson',
+          seatNumber: '14A',
+          ticketClass: 'Economy',
+          passportNumber: 'P12345678',
+          nationality: 'US',
+        ),
+      ],
+      flights: [
+        Flight(
+          flightNumber: 'AA 204',
+          airline: 'American Airlines',
+          airlineCode: 'AA',
+          departureAirport: 'JFK',
+          departureCity: 'New York',
+          arrivalAirport: 'LHR',
+          arrivalCity: 'London',
+          scheduledDeparture: DateTime.now().add(const Duration(days: 5, hours: 10)),
+          scheduledArrival: DateTime.now().add(const Duration(days: 5, hours: 17, minutes: 30)),
+          status: FlightStatus.scheduled,
+          terminal: 'T5',
+          gate: 'B22',
+          seatNumber: '14A',
+          bookingReference: 'TB7K2M',
+        ),
+      ],
+    ),
+    Trip(
+      id: 'trip_002',
+      bookingReference: 'XP9R4Q',
+      status: TripStatus.upcoming,
+      createdAt: DateTime.now().subtract(const Duration(days: 3)),
+      passengers: const [
+        TripPassenger(
+          firstName: 'Alex',
+          lastName: 'Johnson',
+          seatNumber: '22C',
+          ticketClass: 'Business',
+        ),
+      ],
+      flights: [
+        Flight(
+          flightNumber: 'BA 117',
+          airline: 'British Airways',
+          airlineCode: 'BA',
+          departureAirport: 'LAX',
+          departureCity: 'Los Angeles',
+          arrivalAirport: 'CDG',
+          arrivalCity: 'Paris',
+          scheduledDeparture: DateTime.now().add(const Duration(days: 15, hours: 8)),
+          scheduledArrival: DateTime.now().add(const Duration(days: 15, hours: 16, minutes: 45)),
+          status: FlightStatus.scheduled,
+          terminal: 'T1',
+          gate: 'G12',
+          seatNumber: '22C',
+          bookingReference: 'XP9R4Q',
+        ),
+      ],
+    ),
+    Trip(
+      id: 'trip_003',
+      bookingReference: 'DL5F8N',
+      status: TripStatus.completed,
+      createdAt: DateTime.now().subtract(const Duration(days: 45)),
+      passengers: const [
+        TripPassenger(
+          firstName: 'Alex',
+          lastName: 'Johnson',
+          seatNumber: '8D',
+          ticketClass: 'Economy',
+        ),
+      ],
+      flights: [
+        Flight(
+          flightNumber: 'DL 401',
+          airline: 'Delta Air Lines',
+          airlineCode: 'DL',
+          departureAirport: 'ATL',
+          departureCity: 'Atlanta',
+          arrivalAirport: 'MIA',
+          arrivalCity: 'Miami',
+          scheduledDeparture: DateTime.now().subtract(const Duration(days: 30, hours: 9)),
+          scheduledArrival: DateTime.now().subtract(const Duration(days: 30, hours: 11)),
+          status: FlightStatus.arrived,
+          terminal: 'T2',
+          gate: 'A4',
+          seatNumber: '8D',
+          bookingReference: 'DL5F8N',
+        ),
+      ],
+    ),
+  ];
+
+  static final List<Airport> airports = [
+    const Airport(
+      code: 'JFK',
+      name: 'John F. Kennedy International Airport',
+      city: 'New York',
+      country: 'United States',
+      timezone: 'America/New_York',
+      terminals: 6,
+      transportInfo: 'AirTrain, NYC Subway, Taxis, Rideshare, Express Bus',
+      amenities: [
+        AirportAmenity(
+          name: 'Wi-Fi',
+          icon: '📶',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Lounges',
+          icon: '🛋️',
+          location: 'Terminals 1, 4, 5, 7, 8',
+          hours: 'Varies',
+        ),
+        AirportAmenity(
+          name: 'Restaurants & Cafes',
+          icon: '🍽️',
+          location: 'All terminals',
+          hours: '5:00 AM – 11:00 PM',
+        ),
+        AirportAmenity(
+          name: 'Currency Exchange',
+          icon: '💱',
+          location: 'Terminals 1, 4, 8',
+          hours: '8:00 AM – 8:00 PM',
+        ),
+        AirportAmenity(
+          name: 'Duty Free',
+          icon: '🛍️',
+          location: 'Terminals 1, 4, 7, 8',
+          hours: '6:00 AM – 10:00 PM',
+        ),
+        AirportAmenity(
+          name: 'Medical Center',
+          icon: '🏥',
+          location: 'Terminal 4',
+          hours: '24/7',
+        ),
+      ],
+    ),
+    const Airport(
+      code: 'LHR',
+      name: 'London Heathrow Airport',
+      city: 'London',
+      country: 'United Kingdom',
+      timezone: 'Europe/London',
+      terminals: 5,
+      transportInfo: 'Heathrow Express, Elizabeth Line, Piccadilly Line, National Express',
+      amenities: [
+        AirportAmenity(
+          name: 'Wi-Fi',
+          icon: '📶',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Lounges',
+          icon: '🛋️',
+          location: 'All terminals',
+          hours: 'Varies by airline',
+        ),
+        AirportAmenity(
+          name: 'Restaurants & Bars',
+          icon: '🍽️',
+          location: 'All terminals',
+          hours: '4:00 AM – 11:00 PM',
+        ),
+        AirportAmenity(
+          name: 'Duty Free',
+          icon: '🛍️',
+          location: 'All terminals',
+          hours: '5:00 AM – 10:00 PM',
+        ),
+        AirportAmenity(
+          name: 'Pharmacy',
+          icon: '💊',
+          location: 'Terminals 2, 3, 4, 5',
+          hours: '5:30 AM – 9:30 PM',
+        ),
+      ],
+    ),
+    const Airport(
+      code: 'CDG',
+      name: 'Charles de Gaulle Airport',
+      city: 'Paris',
+      country: 'France',
+      timezone: 'Europe/Paris',
+      terminals: 3,
+      transportInfo: 'RER B (Paris Metro), TGV, Roissybus, Taxis, Rideshare',
+      amenities: [
+        AirportAmenity(
+          name: 'Wi-Fi',
+          icon: '📶',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Lounges',
+          icon: '🛋️',
+          location: 'Terminals 1, 2E, 2F',
+          hours: 'Varies',
+        ),
+        AirportAmenity(
+          name: 'Restaurants',
+          icon: '🍽️',
+          location: 'All terminals',
+          hours: '5:00 AM – 11:00 PM',
+        ),
+        AirportAmenity(
+          name: 'Duty Free',
+          icon: '🛍️',
+          location: 'All terminals',
+          hours: '6:00 AM – 10:00 PM',
+        ),
+      ],
+    ),
+    const Airport(
+      code: 'DXB',
+      name: 'Dubai International Airport',
+      city: 'Dubai',
+      country: 'United Arab Emirates',
+      timezone: 'Asia/Dubai',
+      terminals: 3,
+      transportInfo: 'Dubai Metro (Red Line), Taxis, Rideshare',
+      amenities: [
+        AirportAmenity(
+          name: 'Wi-Fi',
+          icon: '📶',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Lounges',
+          icon: '🛋️',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Restaurants & Food Courts',
+          icon: '🍽️',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Luxury Shopping',
+          icon: '🛍️',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Spa',
+          icon: '💆',
+          location: 'Concourse A, B',
+          hours: '24/7',
+        ),
+      ],
+    ),
+    const Airport(
+      code: 'SIN',
+      name: 'Singapore Changi Airport',
+      city: 'Singapore',
+      country: 'Singapore',
+      timezone: 'Asia/Singapore',
+      terminals: 4,
+      transportInfo: 'MRT East West Line, Taxis, Rideshare',
+      amenities: [
+        AirportAmenity(
+          name: 'Wi-Fi',
+          icon: '📶',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Butterfly Garden',
+          icon: '🦋',
+          location: 'Terminal 3',
+          hours: '6:00 AM – 12:00 AM',
+        ),
+        AirportAmenity(
+          name: 'Rooftop Pool',
+          icon: '🏊',
+          location: 'Jewel Changi',
+          hours: '10:00 AM – 10:00 PM',
+        ),
+        AirportAmenity(
+          name: 'Restaurants',
+          icon: '🍽️',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+        AirportAmenity(
+          name: 'Duty Free',
+          icon: '🛍️',
+          location: 'All terminals',
+          hours: '24/7',
+        ),
+      ],
+    ),
+  ];
+
+  static final List<TravelDocument> documents = [
+    TravelDocument(
+      id: 'doc_001',
+      type: DocumentType.passport,
+      title: 'US Passport',
+      documentNumber: 'P12345678',
+      issueDate: DateTime(2019, 3, 15),
+      expiryDate: DateTime(2029, 3, 14),
+      issuingCountry: 'United States',
+      tripId: 'trip_001',
+    ),
+    TravelDocument(
+      id: 'doc_002',
+      type: DocumentType.boardingPass,
+      title: 'Boarding Pass – AA 204',
+      documentNumber: 'TB7K2M',
+      issueDate: DateTime.now().subtract(const Duration(days: 1)),
+      tripId: 'trip_001',
+    ),
+    TravelDocument(
+      id: 'doc_003',
+      type: DocumentType.travelInsurance,
+      title: 'Travel Insurance Policy',
+      documentNumber: 'TI-2026-007842',
+      expiryDate: DateTime.now().add(const Duration(days: 30)),
+      issuingCountry: 'United States',
+    ),
+    TravelDocument(
+      id: 'doc_004',
+      type: DocumentType.visa,
+      title: 'UK Tourist Visa',
+      documentNumber: 'GBR-V-123456',
+      expiryDate: DateTime.now().add(const Duration(days: 180)),
+      issuingCountry: 'United Kingdom',
+      tripId: 'trip_001',
+    ),
+  ];
+}

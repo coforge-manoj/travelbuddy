@@ -8,8 +8,6 @@ import 'package:ai_travel_assistant/core/theme/app_theme.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/chat_local_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/pages/chat_page.dart';
 
-import 'features/chat/presentation/pages/chat_page.dart';
-
 /// Standalone runner for local development of this module in isolation from
 /// a host app. Host apps should instead merge `core/di/providers.dart`'s
 /// overrides into their own composition root and push
@@ -43,7 +41,7 @@ class AiTravelAssistantDemoApp extends StatelessWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.system,
-      home: const BasicChatPage(),
+      home: const ChatPage(),
     );
   }
 }

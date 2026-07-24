@@ -2,26 +2,78 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
+import '../../features/ai_travel_assistant/data/models/summerized_input_result_model.dart';
+import '../enum/flight_input_type.dart';
+
+/// ---------------------------------------------------------------------------
+/// InputSummarizeService
+/// ---------------------------------------------------------------------------
+///
+/// Responsibilities:
+/// 1. Cleans speech-to-text input by removing fillers and fixing grammar.
+/// 2. Detects the user's intent using Gemini.
+/// 3. Returns a [SummarizedInputResult] containing:
+///    - cleanedText
+///    - detected FlightInputType
+///
+/// Example:
+///
+/// Input:
+/// "umm i need extra 10kg baggage"
+///
+/// Output:
+/// SummarizedInputResult(
+///   cleanedText: "I need an extra 10 kg baggage allowance.",
+///   inputType: FlightInputType.addBaggage,
+/// )
+///
 class InputSummarizeService {
   InputSummarizeService._();
 
+  /// Singleton instance.
   static final InputSummarizeService instance = InputSummarizeService._();
 
-  final String _apiUrl =
-  dotenv.env['API_URL'] ?? '';
+  /// LLM API endpoint.
+  final String _apiUrl = dotenv.env['API_URL'] ?? '';
 
-  final String _apiKey =
-  dotenv.env['API_KEY'] ?? '';
+  /// API key used for authentication.
+  final String _apiKey = dotenv.env['API_KEY'] ?? '';
 
-  final String _model =
-  dotenv.env['MODEL_NAME'] ?? 'gemini-2-5-flash';
+  /// Model name configured in .env.
+  final String _model = dotenv.env['MODEL_NAME'] ?? 'gemini-2-5-flash';
 
-  Future<String> summarizeInput(String input) async {
+  /// -------------------------------------------------------------------------
+  /// summarizeInput
+  /// -------------------------------------------------------------------------
+  ///
+  /// Sends the user input to the LLM and returns:
+  /// - Cleaned text
+  /// - Detected intent
+  ///
+  /// Supported intents:
+  /// - flightStatus
+  /// - seatSelection
+  /// - addBaggage
+  /// - checkInCounterAndTerminal
+  /// - baggageAllowance
+  /// - boardingTime
+  /// - airportNavigation
+  /// - travelDocuments
+  /// - other
+  ///
+  Future<SummarizedInputResult> summarizeInput(
+    String input,
+  ) async {
     try {
+      /// Return default result when input is empty.
       if (input.trim().isEmpty) {
-        return '';
+        return SummarizedInputResult(
+          cleanedText: '',
+          inputType: FlightInputType.other,
+        );
       }
 
+      /// Call the LLM endpoint.
       final response = await http.post(
         Uri.parse(_apiUrl),
         headers: {
@@ -34,19 +86,32 @@ class InputSummarizeService {
             {
               "role": "system",
               "content": """
-You are an intent-cleaning assistant.
+You are an intent detection assistant.
 
-Your task is to clean speech-to-text transcripts.
+Your tasks:
+1. Clean speech-to-text input.
+2. Detect intent.
 
-Rules:
-- Remove filler words such as um, umm, uh, hmm, er, ah.
-- Remove unnecessary repetitions.
-- Fix grammar and punctuation.
-- Preserve all important information.
-- Preserve names, dates, amounts, locations, and user intent.
-- Do not shorten the message unless the removed text is irrelevant filler.
-- Return only the cleaned text.
-- Do not explain your changes.
+Available intent types:
+
+- flightStatus
+- seatSelection
+- addBaggage
+- checkInCounterAndTerminal
+- baggageAllowance
+- boardingTime
+- airportNavigation
+- travelDocuments
+- other
+
+Return ONLY JSON.
+
+Example:
+
+{
+  "cleanedText":"What is my boarding time?",
+  "inputType":"boardingTime"
+}
 """
             },
             {
@@ -54,23 +119,61 @@ Rules:
               "content": input,
             }
           ],
-          "temperature": 0.0,
+          "temperature": 0
         }),
       );
 
-      if (response.statusCode != 200) {
-        throw Exception(
-          'API Error (${response.statusCode}): ${response.body}',
-        );
-      }
-
+      /// Parse API response.
       final data = jsonDecode(response.body);
 
-      return data['choices'][0]['message']['content']?.toString().trim() ??
-          input;
+      /// Extract the model content.
+      final content = data['choices'][0]['message']['content'].toString();
+
+      /// Remove markdown code block wrappers if Gemini adds them.
+      ///
+      /// Example:
+      /// ```json
+      /// {
+      ///   "cleanedText":"..."
+      /// }
+      /// ```
+      final cleanedContent =
+          content.replaceAll('```json', '').replaceAll('```', '').trim();
+
+      print('CLEANED RESPONSE => $cleanedContent');
+
+      /// Convert JSON string into a Map.
+      final result = jsonDecode(cleanedContent);
+
+      /// Read intent safely from response.
+      final intent = result['inputType']?.toString().trim() ?? 'other';
+
+      /// Convert string intent to enum.
+      return SummarizedInputResult(
+        cleanedText: result['cleanedText']?.toString() ?? input,
+        inputType: FlightInputType.values.firstWhere(
+          (e) => e.name.toLowerCase() == intent.toLowerCase(),
+          orElse: () => FlightInputType.other,
+        ),
+      );
     } catch (e) {
-      print('InputSummarizeService Error: $e');
-      return input;
+      /// Fallback in case:
+      /// - API failure
+      /// - Invalid JSON
+      /// - Unexpected model response
+      print(e);
+
+      return SummarizedInputResult(
+        cleanedText: input,
+        inputType: FlightInputType.other,
+      );
     }
   }
 }
+
+
+
+///
+//  final SummarizedInputResult result =
+//     await InputSummarizeService.instance.summarizeInput(text);
+// here you'll get into result type and msg.

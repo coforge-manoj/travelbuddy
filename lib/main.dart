@@ -5,7 +5,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:ai_travel_assistant/core/di/providers.dart';
 import 'package:ai_travel_assistant/core/theme/app_theme.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/chat_local_datasource.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/pages/chat_page.dart';
+import 'package:ai_travel_assistant/features/landing/presentation/pages/landing_page.dart';
 
 /// Standalone runner for local development of this module in isolation from
 /// a host app. Host apps should instead merge `core/di/providers.dart`'s
@@ -39,7 +39,7 @@ class AiTravelAssistantDemoApp extends StatelessWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.system,
-      home: const ChatPage(),
+      home: const LandingPage(),
     );
   }
 }

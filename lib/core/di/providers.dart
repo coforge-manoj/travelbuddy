@@ -27,11 +27,13 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/classify_intent_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/escalate_to_agent_usecase.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/book_flight_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_airport_details_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_baggage_options_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_flight_status_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_seat_map_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/search_flights_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
@@ -161,6 +163,14 @@ final getFlightStatusUseCaseProvider = Provider<GetFlightStatusUseCase>((ref) {
   return GetFlightStatusUseCase(ref.watch(flightRepositoryProvider));
 });
 
+final searchFlightsUseCaseProvider = Provider<SearchFlightsUseCase>((ref) {
+  return SearchFlightsUseCase(ref.watch(flightRepositoryProvider));
+});
+
+final bookFlightUseCaseProvider = Provider<BookFlightUseCase>((ref) {
+  return BookFlightUseCase(ref.watch(flightRepositoryProvider));
+});
+
 final getSeatMapUseCaseProvider = Provider<GetSeatMapUseCase>((ref) {
   return GetSeatMapUseCase(ref.watch(seatRepositoryProvider));
 });
@@ -189,12 +199,12 @@ final escalateToAgentUseCaseProvider = Provider<EscalateToAgentUseCase>((ref) {
   return EscalateToAgentUseCase(ref.watch(agentRepositoryProvider));
 });
 
-final loadChatHistoryUseCaseProvider = Provider<LoadChatHistoryUseCase>((ref) {
-  return LoadChatHistoryUseCase(ref.watch(chatHistoryRepositoryProvider));
-});
-
 final saveChatMessageUseCaseProvider = Provider<SaveChatMessageUseCase>((ref) {
   return SaveChatMessageUseCase(ref.watch(chatHistoryRepositoryProvider));
+});
+
+final clearChatHistoryUseCaseProvider = Provider<ClearChatHistoryUseCase>((ref) {
+  return ClearChatHistoryUseCase(ref.watch(chatHistoryRepositoryProvider));
 });
 
 // Note: `chatViewModelProvider` itself lives in

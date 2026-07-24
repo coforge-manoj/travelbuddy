@@ -16,7 +16,6 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final align = _isUser ? Alignment.centerRight : Alignment.centerLeft;
     final color = _isError
         ? ChatColors.errorBubble(context)
         : _isUser
@@ -25,30 +24,59 @@ class ChatBubble extends StatelessWidget {
     final textColor =
         _isUser ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.onSurface;
 
-    return Align(
-      alignment: align,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(_isUser ? 16 : 4),
-            bottomRight: Radius.circular(_isUser ? 4 : 16),
-          ),
-          boxShadow: [
-            if (!_isUser)
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-          ],
+    final bubble = Container(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: Radius.circular(_isUser ? 16 : 4),
+          bottomRight: Radius.circular(_isUser ? 4 : 16),
         ),
-        child: MarkdownMessage(text: message.text, color: textColor),
+        boxShadow: [
+          if (!_isUser)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+        ],
+      ),
+      child: MarkdownMessage(text: message.text, color: textColor),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+      child: Row(
+        mainAxisAlignment: _isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!_isUser) ...[
+            const _AssistantAvatar(),
+            const SizedBox(width: 8),
+          ],
+          Flexible(child: bubble),
+        ],
+      ),
+    );
+  }
+}
+
+/// The small TravelBuddy avatar shown beside assistant bubbles, matching the
+/// avatar used in the chat header and the landing screen's chat launcher.
+class _AssistantAvatar extends StatelessWidget {
+  const _AssistantAvatar();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: Image.asset(
+        'assets/icons/Buddy.png',
+        width: 28,
+        height: 28,
+        fit: BoxFit.cover,
       ),
     );
   }

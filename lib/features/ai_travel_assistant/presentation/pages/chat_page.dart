@@ -5,9 +5,10 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_bubble.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_header.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/message_composer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/quick_actions_list.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/rich_card_widget.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/suggested_prompts.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/typing_indicator.dart';
 
 /// The single entry-point screen for the AI Travel Assistant. Push this from
@@ -52,39 +53,40 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
 
+    final isTyping = state.status == ChatStatus.sendingMessage;
+    // Show the onboarding shortcuts once the welcome message and the initial
+    // flight-offer suggestion have landed, until the passenger acts on
+    // either of them.
+    final showQuickActions = state.messages.length <= 2 && state.status == ChatStatus.idle;
+    final itemCount = state.messages.length + (isTyping ? 1 : 0) + (showQuickActions ? 1 : 0);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Travel Assistant'),
-        centerTitle: false,
-      ),
       body: Column(
         children: [
+          ChatHeader(onBack: () => Navigator.of(context).maybePop()),
           Expanded(
             child: state.messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    itemCount:
-                        state.messages.length + (state.status == ChatStatus.sendingMessage ? 1 : 0),
+                    itemCount: itemCount,
                     itemBuilder: (context, index) {
-                      if (index == state.messages.length) {
+                      if (index < state.messages.length) {
+                        final message = state.messages[index];
+                        final isRichCard = message.type != ChatMessageType.text &&
+                            message.type != ChatMessageType.error;
+                        return isRichCard
+                            ? RichCardWidget(message: message)
+                            : ChatBubble(message: message);
+                      }
+                      if (isTyping && index == state.messages.length) {
                         return const TypingIndicator();
                       }
-                      final message = state.messages[index];
-                      final isRichCard = message.type != ChatMessageType.text &&
-                          message.type != ChatMessageType.error;
-                      return isRichCard
-                          ? RichCardWidget(message: message)
-                          : ChatBubble(message: message);
+                      return QuickActionsList(onSelected: viewModel.sendMessage);
                     },
                   ),
           ),
-          SuggestedPrompts(
-            prompts: state.suggestedPrompts,
-            onSelected: viewModel.sendMessage,
-          ),
-          const Divider(height: 1),
           MessageComposer(
             enabled: !state.isBusy,
             isListening: state.status == ChatStatus.listening,

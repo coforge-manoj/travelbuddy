@@ -4,6 +4,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/air
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/baggage_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/booking_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/flight_model.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/flight_offer_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/seat_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
 
@@ -66,6 +67,75 @@ class MockBackendServer {
 
   BookingModel booking(String pnr) {
     return BookingModel(pnr: pnr, passengerName: 'A. Passenger', flight: flight('FZ123'));
+  }
+
+  // ---------------------------------------------------------------------
+  // Flight search / booking
+  // ---------------------------------------------------------------------
+  final Map<String, List<FlightOfferModel>> _flightOffers = {};
+
+  List<FlightOfferModel> _generateFlightOffers({
+    required String origin,
+    required String destination,
+  }) {
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    DateTime depart(int hour, int minute) =>
+        DateTime(tomorrow.year, tomorrow.month, tomorrow.day, hour, minute);
+
+    final offers = <(String, String, int, int, int, int, num, int)>[
+      ('United Airlines', 'UA482', 6, 45, 8, 58, 189, 0),
+      ('American Airlines', 'AA1190', 9, 15, 11, 30, 214, 0),
+      ('Delta Air Lines', 'DL2071', 12, 30, 15, 40, 176, 1),
+      ('JetBlue', 'B6935', 17, 5, 19, 22, 165, 0),
+    ];
+
+    return [
+      for (final (airline, flightNumber, dh, dm, ah, am, price, stops) in offers)
+        FlightOfferModel(
+          id: flightNumber,
+          airline: airline,
+          flightNumber: flightNumber,
+          origin: origin,
+          destination: destination,
+          departureTime: depart(dh, dm).toIso8601String(),
+          arrivalTime: depart(ah, am).toIso8601String(),
+          price: price,
+          stops: stops,
+        ),
+    ];
+  }
+
+  List<FlightOfferModel> searchFlights({required String origin, required String destination}) {
+    final key = '$origin-$destination';
+    return _flightOffers.putIfAbsent(
+      key,
+      () => _generateFlightOffers(origin: origin, destination: destination),
+    );
+  }
+
+  final List<BookingModel> bookingHistory = [];
+
+  /// Returns `null` if [simulatePaymentFailure] is set, mirroring a declined
+  /// card at checkout.
+  BookingModel? bookFlight({required String offerId, required String passengerName}) {
+    if (simulatePaymentFailure) return null;
+    final offer = _flightOffers.values
+        .expand((offers) => offers)
+        .firstWhere((o) => o.id == offerId, orElse: () => searchFlights(origin: 'EWR', destination: 'ORD').first);
+
+    final booking = BookingModel(
+      pnr: 'TB${_random.nextInt(900000) + 100000}',
+      passengerName: passengerName,
+      flight: FlightModel(
+        flightNumber: offer.flightNumber,
+        origin: offer.origin,
+        destination: offer.destination,
+        status: 'scheduled',
+        scheduledDeparture: offer.departureTime,
+      ),
+    );
+    bookingHistory.add(booking);
+    return booking;
   }
 
   // ---------------------------------------------------------------------

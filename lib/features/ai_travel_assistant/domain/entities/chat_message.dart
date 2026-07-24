@@ -7,6 +7,8 @@ enum ChatRole { user, assistant, system }
 enum ChatMessageType {
   text,
   flightStatusCard,
+  flightOffersCard,
+  bookingConfirmationCard,
   seatMapCard,
   baggageOptionsCard,
   baggageSuccessCard,

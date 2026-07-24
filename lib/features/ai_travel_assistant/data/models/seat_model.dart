@@ -20,6 +20,16 @@ class SeatModel with _$SeatModel {
 
   factory SeatModel.fromJson(Map<String, dynamic> json) => _$SeatModelFromJson(json);
 
+  factory SeatModel.fromEntity(Seat e) => SeatModel(
+        seatNumber: e.seatNumber,
+        row: e.row,
+        column: e.column,
+        type: e.type.name,
+        availability: e.availability.name,
+        priceDelta: e.priceDelta,
+        isExitRow: e.isExitRow,
+      );
+
   Seat toEntity() {
     return Seat(
       seatNumber: seatNumber,
@@ -48,6 +58,13 @@ class SeatMapModel with _$SeatMapModel {
   }) = _SeatMapModel;
 
   factory SeatMapModel.fromJson(Map<String, dynamic> json) => _$SeatMapModelFromJson(json);
+
+  factory SeatMapModel.fromEntity(SeatMap e) => SeatMapModel(
+        flightNumber: e.flightNumber,
+        rows: e.rows,
+        seats: e.seats.map(SeatModel.fromEntity).toList(),
+        currency: e.currency,
+      );
 
   SeatMap toEntity() {
     return SeatMap(

@@ -7,6 +7,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/audio_message_bubble.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/airport/airport_info_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart';
@@ -26,21 +27,89 @@ class RichCardWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return switch (message.type) {
-      ChatMessageType.flightStatusCard => FlightStatusCard(flight: message.payload! as Flight),
-      ChatMessageType.seatMapCard => SeatMapCard(seatMap: message.payload! as SeatMap),
-      ChatMessageType.baggageOptionsCard =>
-        BaggageOptionsCard(options: message.payload! as List<BaggageOption>),
-      ChatMessageType.baggageSuccessCard =>
-        BaggageSuccessCard(purchase: message.payload! as BaggagePurchase),
-      ChatMessageType.airportInfoCard => AirportInfoCard(info: message.payload! as AirportInfo),
-      ChatMessageType.agentEscalationCard => _AgentEscalationCard(
-          escalation: message.payload as EscalationResult?,
+    // Payloads are typed-checked rather than force-unwrapped: a message
+    // restored from history whose payload failed to round-trip comes back
+    // null, and a hard cast there would throw and paint Flutter's maroon
+    // error box over the whole bubble. On a mismatch we degrade to a small
+    // "card unavailable" note instead.
+    final payload = message.payload;
+    switch (message.type) {
+      case ChatMessageType.audioMessage:
+        final audioPath = message.audioPath;
+        if (audioPath != null) {
+          return AudioMessageBubble(
+            audioPath: audioPath,
+            duration: message.audioDuration,
+          );
+        }
+      case ChatMessageType.flightStatusCard:
+        if (payload is Flight) return FlightStatusCard(flight: payload);
+      case ChatMessageType.seatMapCard:
+        if (payload is SeatMap) return SeatMapCard(seatMap: payload);
+      case ChatMessageType.baggageOptionsCard:
+        if (payload is List<BaggageOption>) {
+          return BaggageOptionsCard(options: payload);
+        }
+      case ChatMessageType.baggageSuccessCard:
+        if (payload is BaggagePurchase) {
+          return BaggageSuccessCard(purchase: payload);
+        }
+      case ChatMessageType.airportInfoCard:
+        if (payload is AirportInfo) return AirportInfoCard(info: payload);
+      case ChatMessageType.agentEscalationCard:
+        return _AgentEscalationCard(
+          escalation: payload is EscalationResult ? payload : null,
           text: message.text,
+        );
+      case ChatMessageType.text:
+      case ChatMessageType.error:
+        return _AgentEscalationCard(escalation: null, text: message.text);
+    }
+    return _UnavailableCard(text: message.text);
+  }
+}
+
+/// Shown when a rich card's structured payload is missing — e.g. an older
+/// history record saved before payloads were persisted. Keeps the thread
+/// readable instead of crashing the bubble.
+class _UnavailableCard extends StatelessWidget {
+  const _UnavailableCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+        padding: const EdgeInsets.all(14),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.outlineVariant),
         ),
-      ChatMessageType.text || ChatMessageType.error =>
-        _AgentEscalationCard(escalation: null, text: message.text),
-    };
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.info_outline, size: 18, color: scheme.outline),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                text.isNotEmpty ? text : 'This card is no longer available.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: scheme.outline),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -60,7 +129,8 @@ class _AgentEscalationCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
         padding: const EdgeInsets.all(14),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(16),
@@ -74,7 +144,8 @@ class _AgentEscalationCard extends StatelessWidget {
               children: [
                 Icon(Icons.support_agent, size: 18, color: scheme.primary),
                 const SizedBox(width: 8),
-                Text('Agent escalation', style: Theme.of(context).textTheme.labelLarge),
+                Text('Agent escalation',
+                    style: Theme.of(context).textTheme.labelLarge,),
               ],
             ),
             const SizedBox(height: 8),

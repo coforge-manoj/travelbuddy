@@ -20,6 +20,15 @@ class AirportInfoModel with _$AirportInfoModel {
   factory AirportInfoModel.fromJson(Map<String, dynamic> json) =>
       _$AirportInfoModelFromJson(json);
 
+  factory AirportInfoModel.fromEntity(AirportInfo e) => AirportInfoModel(
+        terminal: e.terminal,
+        checkInCounter: e.checkInCounter,
+        gate: e.gate,
+        walkingTimeMinutes: e.walkingTimeMinutes,
+        indoorMapAssetPath: e.indoorMapAssetPath,
+        directions: e.directions,
+      );
+
   AirportInfo toEntity() {
     return AirportInfo(
       terminal: terminal,

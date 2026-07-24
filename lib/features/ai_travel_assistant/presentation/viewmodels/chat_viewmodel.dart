@@ -4,85 +4,63 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:ai_travel_assistant/core/di/providers.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/services/llm/llm_service.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/classify_intent_usecase.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/escalate_to_agent_usecase.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_airport_details_usecase.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_baggage_options_usecase.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_flight_status_usecase.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_seat_map_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/run_assistant_turn_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
 const _uuid = Uuid();
 
-/// Hard-codes the active booking context for this module's standalone demo.
-/// In a real host app this comes from the passenger's active
-/// booking/session — swap these for a real `currentBookingProvider` at
-/// integration time.
+/// Hard-codes the active booking context for the interactive follow-ups
+/// (seat change, baggage purchase). The assistant turn itself gets its booking
+/// context from [RunAssistantTurnUseCase]. Swap these for a real
+/// `currentBookingProvider` at integration time.
 const _demoFlightNumber = 'FZ123';
 const _demoPnr = 'ABC123';
-const _demoAirportCode = 'DXB';
 
-/// The single orchestrator behind the chat screen: sends user text through
-/// intent classification, then routes to the right use case (flight status,
-/// seat map, baggage options, airport info, or human escalation) and turns
-/// the result into a rich [ChatMessage] the UI can render. Falls back to a
-/// free-form AI reply for FAQ/unknown intents.
+/// The chat screen's orchestrator. User text (typed, dictated, or from a
+/// suggested prompt) is sent through [RunAssistantTurnUseCase], where Gemini
+/// picks a tool, the matching use case runs, and the result comes back as a
+/// summary bubble plus rich card message(s). Interactive card callbacks
+/// (seat change, baggage purchase) and voice I/O are handled here directly.
 class ChatViewModel extends StateNotifier<ChatState> {
   ChatViewModel({
-    required SendMessageUseCase sendMessageUseCase,
-    required ClassifyIntentUseCase classifyIntentUseCase,
-    required GetFlightStatusUseCase getFlightStatusUseCase,
-    required GetSeatMapUseCase getSeatMapUseCase,
+    required RunAssistantTurnUseCase runAssistantTurnUseCase,
     required ChangeSeatUseCase changeSeatUseCase,
-    required GetBaggageOptionsUseCase getBaggageOptionsUseCase,
     required PurchaseBaggageUseCase purchaseBaggageUseCase,
-    required GetAirportDetailsUseCase getAirportDetailsUseCase,
-    required EscalateToAgentUseCase escalateToAgentUseCase,
     required LoadChatHistoryUseCase loadChatHistoryUseCase,
     required SaveChatMessageUseCase saveChatMessageUseCase,
+    required ClearChatHistoryUseCase clearChatHistoryUseCase,
     required VoiceService voiceService,
-  })  : _sendMessageUseCase = sendMessageUseCase,
-        _classifyIntentUseCase = classifyIntentUseCase,
-        _getFlightStatusUseCase = getFlightStatusUseCase,
-        _getSeatMapUseCase = getSeatMapUseCase,
+  })  : _runAssistantTurnUseCase = runAssistantTurnUseCase,
         _changeSeatUseCase = changeSeatUseCase,
-        _getBaggageOptionsUseCase = getBaggageOptionsUseCase,
         _purchaseBaggageUseCase = purchaseBaggageUseCase,
-        _getAirportDetailsUseCase = getAirportDetailsUseCase,
-        _escalateToAgentUseCase = escalateToAgentUseCase,
         _loadChatHistoryUseCase = loadChatHistoryUseCase,
         _saveChatMessageUseCase = saveChatMessageUseCase,
+        _clearChatHistoryUseCase = clearChatHistoryUseCase,
         _voiceService = voiceService,
         super(const ChatState()) {
     _loadHistory();
   }
 
-  final SendMessageUseCase _sendMessageUseCase;
-  final ClassifyIntentUseCase _classifyIntentUseCase;
-  final GetFlightStatusUseCase _getFlightStatusUseCase;
-  final GetSeatMapUseCase _getSeatMapUseCase;
+  final RunAssistantTurnUseCase _runAssistantTurnUseCase;
   final ChangeSeatUseCase _changeSeatUseCase;
-  final GetBaggageOptionsUseCase _getBaggageOptionsUseCase;
   final PurchaseBaggageUseCase _purchaseBaggageUseCase;
-  final GetAirportDetailsUseCase _getAirportDetailsUseCase;
-  final EscalateToAgentUseCase _escalateToAgentUseCase;
   final LoadChatHistoryUseCase _loadChatHistoryUseCase;
   final SaveChatMessageUseCase _saveChatMessageUseCase;
+  final ClearChatHistoryUseCase _clearChatHistoryUseCase;
   final VoiceService _voiceService;
 
   Future<void> _loadHistory() async {
     state = state.copyWith(status: ChatStatus.loadingHistory);
     final result = await _loadChatHistoryUseCase();
     result.fold(
-      (failure) => state = state.copyWith(status: ChatStatus.idle, messages: _welcomeMessages()),
+      (failure) => state =
+          state.copyWith(status: ChatStatus.idle, messages: _welcomeMessages()),
       (history) => state = state.copyWith(
         status: ChatStatus.idle,
         messages: history.isEmpty ? _welcomeMessages() : history,
@@ -103,7 +81,24 @@ class ChatViewModel extends StateNotifier<ChatState> {
     ];
   }
 
-  /// Entry point for the composer and suggested-prompt chips.
+  /// Clears the conversation and returns to the initial welcome state. The
+  /// single welcome message keeps `messages.length <= 1`, so the suggested
+  /// prompts reappear for the passenger to start fresh.
+  Future<void> resetChat() async {
+    if (state.status == ChatStatus.listening) {
+      await stopVoiceInput();
+    }
+    unawaited(_voiceService.stopSpeaking());
+    await _clearChatHistoryUseCase();
+    state = state.copyWith(
+      status: ChatStatus.idle,
+      messages: _welcomeMessages(),
+      clearError: true,
+      clearVoiceDraft: true,
+    );
+  }
+
+  /// Entry point for the composer, dictation, and suggested-prompt chips.
   Future<void> sendMessage(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty || state.isBusy) return;
@@ -117,79 +112,28 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: trimmed,
       ),
     );
-    state = state.copyWith(status: ChatStatus.sendingMessage, clearError: true);
-
-    final intentResult = await _classifyIntentUseCase(trimmed);
-    await intentResult.fold(
-      (failure) async => _appendError(failure.message),
-      (intent) async => _handleIntent(intent, trimmed),
+    // Clear any leftover dictation draft now that it's been sent.
+    state = state.copyWith(
+      status: ChatStatus.sendingMessage,
+      clearError: true,
+      clearVoiceDraft: true,
     );
+
+    try {
+      final replies = await _runAssistantTurnUseCase(trimmed);
+      for (final message in replies) {
+        _appendMessage(message);
+      }
+    } on LlmException catch (e) {
+      _appendError(e.message);
+    } catch (e) {
+      _appendError('Something went wrong: $e');
+    }
 
     state = state.copyWith(status: ChatStatus.idle);
   }
 
-  Future<void> _handleIntent(IntentResult intent, String utterance) async {
-    if (intent.isLowConfidence && intent.type != IntentType.faq) {
-      _appendEscalationOffer();
-      return;
-    }
-
-    switch (intent.type) {
-      case IntentType.flightStatus:
-      case IntentType.boardingTime:
-        await _handleFlightStatus();
-      case IntentType.seatSelection:
-        await _handleSeatSelection();
-      case IntentType.addBaggage:
-      case IntentType.baggageAllowance:
-        await _handleBaggage();
-      case IntentType.terminalInformation:
-      case IntentType.counterInformation:
-      case IntentType.airportNavigation:
-        await _handleAirportInfo();
-      case IntentType.humanAgent:
-        await _handleEscalation(utterance);
-      case IntentType.faq:
-      case IntentType.unknown:
-        await _handleGenericReply(utterance);
-    }
-  }
-
-  Future<void> _handleFlightStatus() async {
-    final result = await _getFlightStatusUseCase(_demoFlightNumber);
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (flight) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.flightStatusCard,
-          timestamp: DateTime.now(),
-          text: 'Here is the latest status for ${flight.flightNumber}.',
-          payload: flight,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _handleSeatSelection() async {
-    final result = await _getSeatMapUseCase(_demoFlightNumber);
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (seatMap) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.seatMapCard,
-          timestamp: DateTime.now(),
-          text: 'Pick a seat below — window seats are highlighted.',
-          payload: seatMap,
-        ),
-      ),
-    );
-  }
-
-  /// Called by the seat-selection UI (Phase 8) once the passenger taps a seat.
+  /// Called by the seat-selection card once the passenger taps a seat.
   Future<void> confirmSeatChange(String seatNumber) async {
     state = state.copyWith(status: ChatStatus.sendingMessage);
     final result = await _changeSeatUseCase(
@@ -212,27 +156,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
     state = state.copyWith(status: ChatStatus.idle);
   }
 
-  Future<void> _handleBaggage() async {
-    final result = await _getBaggageOptionsUseCase(_demoFlightNumber);
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (options) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.baggageOptionsCard,
-          timestamp: DateTime.now(),
-          text: 'Here are your extra baggage options.',
-          payload: options,
-        ),
-      ),
-    );
-  }
-
-  /// Called by the baggage UI (Phase 9) once the passenger picks an option.
+  /// Called by the baggage card once the passenger picks an option.
   Future<void> confirmBaggagePurchase(String optionId) async {
     state = state.copyWith(status: ChatStatus.sendingMessage);
-    final result = await _purchaseBaggageUseCase(pnr: _demoPnr, optionId: optionId);
+    final result =
+        await _purchaseBaggageUseCase(pnr: _demoPnr, optionId: optionId);
     result.fold(
       (failure) => _appendError(failure.message),
       (purchase) => _appendMessage(
@@ -249,75 +177,80 @@ class ChatViewModel extends StateNotifier<ChatState> {
     state = state.copyWith(status: ChatStatus.idle);
   }
 
-  Future<void> _handleAirportInfo() async {
-    final result = await _getAirportDetailsUseCase(
-      flightNumber: _demoFlightNumber,
-      airportCode: _demoAirportCode,
-    );
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (info) => _appendMessage(
+  /// Voice mode 2 — voice conversation. Takes a finished recording, shows a
+  /// replayable audio bubble (or the transcript as text when no file was
+  /// captured — Android), summarizes the transcript, runs the same assistant
+  /// loop, and (via [_appendMessage]) speaks the reply aloud.
+  Future<void> submitVoiceRecording(AudioRecordingResult recording) async {
+    if (state.isBusy) return;
+
+    final transcript = recording.transcript.trim();
+    final audioPath = recording.audioPath;
+    final hasAudio = audioPath != null && audioPath.isNotEmpty;
+
+    if (hasAudio) {
+      _appendMessage(
         ChatMessage(
           id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.airportInfoCard,
+          role: ChatRole.user,
+          type: ChatMessageType.audioMessage,
           timestamp: DateTime.now(),
-          text: 'Here is how to get to your gate.',
-          payload: info,
+          audioPath: audioPath,
+          audioDuration: recording.duration,
         ),
-      ),
-    );
-  }
-
-  void _appendEscalationOffer() {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: "I'm not fully sure I understood that. Would you like to chat "
-            'with a customer support agent instead?',
-      ),
-    );
-  }
-
-  Future<void> _handleEscalation(String utterance) async {
-    final result = await _escalateToAgentUseCase(
-      EscalationRequest(
-        reason: 'Passenger requested a human agent',
-        conversationSummary: utterance,
-      ),
-    );
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (escalation) => _appendMessage(
+      );
+    } else if (transcript.isNotEmpty) {
+      // Android STT-only path: no replayable file, but the words still belong
+      // in the thread so the passenger can see what was heard.
+      _appendMessage(
         ChatMessage(
           id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.agentEscalationCard,
+          role: ChatRole.user,
+          type: ChatMessageType.text,
+          text: transcript,
           timestamp: DateTime.now(),
-          text: "You're connected to support.",
-          payload: escalation,
         ),
-      ),
-    );
+      );
+    }
+
+    state = state.copyWith(status: ChatStatus.sendingMessage, clearError: true);
+
+    if (transcript.isEmpty) {
+      _appendError(
+        "I couldn't make out any speech in that recording. Please try again.",
+      );
+      state = state.copyWith(status: ChatStatus.idle);
+      return;
+    }
+
+    try {
+      final prompt =
+          await _runAssistantTurnUseCase.summarizeTranscript(transcript);
+      final replies = await _runAssistantTurnUseCase(prompt);
+      for (final message in replies) {
+        _appendMessage(message);
+      }
+    } on LlmException catch (e) {
+      _appendError(e.message);
+    } catch (e) {
+      _appendError('Something went wrong: $e');
+    }
+
+    state = state.copyWith(status: ChatStatus.idle);
   }
 
-  Future<void> _handleGenericReply(String utterance) async {
-    final result = await _sendMessageUseCase(userUtterance: utterance, history: state.messages);
-    result.fold((failure) => _appendError(failure.message), _appendMessage);
-  }
-
-  /// Starts voice input. On a final transcript, feeds it straight into
-  /// [sendMessage] — the same path suggested prompts and the composer use.
+  /// Voice mode 1 — dictation. Starts listening and streams the transcript
+  /// into [ChatState.voiceDraft] so the composer fills its text field. Nothing
+  /// is sent automatically: the passenger edits and taps send.
   Future<void> startVoiceInput() async {
     if (state.isBusy || state.status == ChatStatus.listening) return;
     final started = await _voiceService.startListening(
       onResult: (transcript, isFinal) {
-        if (isFinal && transcript.trim().isNotEmpty) {
+        state = state.copyWith(voiceDraft: transcript);
+        if (isFinal) {
+          // Recognizer stops on a final result; drop the listening indicator
+          // but keep the dictated text in the composer for editing.
           state = state.copyWith(status: ChatStatus.idle);
-          unawaited(sendMessage(transcript));
         }
       },
     );
@@ -390,19 +323,15 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 }
 
-final chatViewModelProvider = StateNotifierProvider<ChatViewModel, ChatState>((ref) {
+final chatViewModelProvider =
+    StateNotifierProvider<ChatViewModel, ChatState>((ref) {
   return ChatViewModel(
-    sendMessageUseCase: ref.watch(sendMessageUseCaseProvider),
-    classifyIntentUseCase: ref.watch(classifyIntentUseCaseProvider),
-    getFlightStatusUseCase: ref.watch(getFlightStatusUseCaseProvider),
-    getSeatMapUseCase: ref.watch(getSeatMapUseCaseProvider),
+    runAssistantTurnUseCase: ref.watch(runAssistantTurnUseCaseProvider),
     changeSeatUseCase: ref.watch(changeSeatUseCaseProvider),
-    getBaggageOptionsUseCase: ref.watch(getBaggageOptionsUseCaseProvider),
     purchaseBaggageUseCase: ref.watch(purchaseBaggageUseCaseProvider),
-    getAirportDetailsUseCase: ref.watch(getAirportDetailsUseCaseProvider),
-    escalateToAgentUseCase: ref.watch(escalateToAgentUseCaseProvider),
     loadChatHistoryUseCase: ref.watch(loadChatHistoryUseCaseProvider),
     saveChatMessageUseCase: ref.watch(saveChatMessageUseCaseProvider),
+    clearChatHistoryUseCase: ref.watch(clearChatHistoryUseCaseProvider),
     voiceService: ref.watch(voiceServiceProvider),
   );
 });

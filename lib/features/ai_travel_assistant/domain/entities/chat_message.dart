@@ -6,6 +6,7 @@ enum ChatRole { user, assistant, system }
 /// inline in the chat (seat map, baggage options, flight status, etc.).
 enum ChatMessageType {
   text,
+  audioMessage,
   flightStatusCard,
   seatMapCard,
   baggageOptionsCard,
@@ -24,12 +25,19 @@ class ChatMessage extends Equatable {
     this.text = '',
     this.payload,
     this.isStreaming = false,
+    this.audioPath,
+    this.audioDuration,
   });
 
   final String id;
   final ChatRole role;
   final ChatMessageType type;
   final DateTime timestamp;
+
+  /// For [ChatMessageType.audioMessage]: local file path of the recorded voice
+  /// message (voice mode 2), and its length. Null for every other type.
+  final String? audioPath;
+  final Duration? audioDuration;
 
   /// Markdown-formatted text content (used for [ChatMessageType.text] and
   /// as a caption for rich cards).
@@ -59,5 +67,15 @@ class ChatMessage extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, role, type, timestamp, text, payload, isStreaming];
+  List<Object?> get props => [
+        id,
+        role,
+        type,
+        timestamp,
+        text,
+        payload,
+        isStreaming,
+        audioPath,
+        audioDuration,
+      ];
 }

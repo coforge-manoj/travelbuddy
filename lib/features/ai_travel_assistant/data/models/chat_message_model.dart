@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/chat_payload_codec.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 
 part 'chat_message_model.freezed.dart';
@@ -28,20 +29,20 @@ class ChatMessageModel with _$ChatMessageModel {
       type: entity.type.name,
       timestamp: entity.timestamp.toIso8601String(),
       text: entity.text,
-      payload:
-          entity.payload is Map<String, dynamic> ? entity.payload as Map<String, dynamic> : null,
+      payload: ChatPayloadCodec.encode(entity.type, entity.payload),
       isStreaming: entity.isStreaming,
     );
   }
 
   ChatMessage toEntity() {
+    final messageType = ChatMessageType.values.byName(type);
     return ChatMessage(
       id: id,
       role: ChatRole.values.byName(role),
-      type: ChatMessageType.values.byName(type),
+      type: messageType,
       timestamp: DateTime.parse(timestamp),
       text: text,
-      payload: payload,
+      payload: ChatPayloadCodec.decode(messageType, payload),
       isStreaming: isStreaming,
     );
   }

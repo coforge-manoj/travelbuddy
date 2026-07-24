@@ -15,3 +15,10 @@ class SaveChatMessageUseCase {
 
   Future<Result<void>> call(ChatMessage message) => _repository.saveMessage(message);
 }
+
+class ClearChatHistoryUseCase {
+  const ClearChatHistoryUseCase(this._repository);
+  final ChatHistoryRepository _repository;
+
+  Future<Result<void>> call() => _repository.clearHistory();
+}

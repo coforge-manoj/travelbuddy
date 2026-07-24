@@ -8,13 +8,18 @@ class ChatState extends Equatable {
     this.messages = const [],
     this.status = ChatStatus.idle,
     this.suggestedPrompts = const [
-      'Is my flight delayed?',
-      'I want a window seat',
-      'I need another 10kg of baggage',
-      'Which terminal do I go to?',
+      'Flight Status',
+      'Seat Selection',
+      'Add Baggage',
+      'Check-in Counter & Terminal',
+      'Baggage Allowance',
+      'Boarding Time',
+      'Airport Navigation',
+      'Travel Documents',
     ],
     this.errorMessage,
-    this.isVoiceOutputEnabled = true,
+    this.isVoiceOutputEnabled = false,
+    this.voiceDraft,
   });
 
   final List<ChatMessage> messages;
@@ -23,7 +28,13 @@ class ChatState extends Equatable {
   final String? errorMessage;
   final bool isVoiceOutputEnabled;
 
-  bool get isBusy => status == ChatStatus.sendingMessage || status == ChatStatus.loadingHistory;
+  /// Live speech-to-text transcript during dictation (voice mode 1). The
+  /// composer mirrors this into its text field; null when not dictating.
+  final String? voiceDraft;
+
+  bool get isBusy =>
+      status == ChatStatus.sendingMessage ||
+      status == ChatStatus.loadingHistory;
 
   ChatState copyWith({
     List<ChatMessage>? messages,
@@ -32,6 +43,8 @@ class ChatState extends Equatable {
     String? errorMessage,
     bool clearError = false,
     bool? isVoiceOutputEnabled,
+    String? voiceDraft,
+    bool clearVoiceDraft = false,
   }) {
     return ChatState(
       messages: messages ?? this.messages,
@@ -39,10 +52,17 @@ class ChatState extends Equatable {
       suggestedPrompts: suggestedPrompts ?? this.suggestedPrompts,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isVoiceOutputEnabled: isVoiceOutputEnabled ?? this.isVoiceOutputEnabled,
+      voiceDraft: clearVoiceDraft ? null : (voiceDraft ?? this.voiceDraft),
     );
   }
 
   @override
-  List<Object?> get props =>
-      [messages, status, suggestedPrompts, errorMessage, isVoiceOutputEnabled];
+  List<Object?> get props => [
+        messages,
+        status,
+        suggestedPrompts,
+        errorMessage,
+        isVoiceOutputEnabled,
+        voiceDraft,
+      ];
 }

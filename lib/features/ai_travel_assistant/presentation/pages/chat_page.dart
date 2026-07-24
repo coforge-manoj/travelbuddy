@@ -6,6 +6,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/message_composer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/recording_dialog.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/rich_card_widget.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/suggested_prompts.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/typing_indicator.dart';
@@ -56,44 +57,83 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       appBar: AppBar(
         title: const Text('Travel Assistant'),
         centerTitle: false,
+        actions: [
+          IconButton(
+            onPressed: viewModel.toggleVoiceOutput,
+            tooltip: state.isVoiceOutputEnabled
+                ? 'Voice replies on — tap to mute'
+                : 'Voice replies off — tap to unmute',
+            icon: Icon(
+              state.isVoiceOutputEnabled
+                  ? Icons.volume_up
+                  : Icons.volume_off,
+            ),
+          ),
+          IconButton(
+            onPressed: state.isBusy ? null : viewModel.resetChat,
+            tooltip: 'Reset chat',
+            icon: const Icon(Icons.refresh),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: state.messages.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    itemCount:
-                        state.messages.length + (state.status == ChatStatus.sendingMessage ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == state.messages.length) {
-                        return const TypingIndicator();
-                      }
+            child: Builder(
+              builder: (context) {
+                if (state.messages.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final hasTyping = state.status == ChatStatus.sendingMessage;
+                final showSuggestions = state.messages.length <= 1;
+                final itemCount = state.messages.length +
+                    (hasTyping ? 1 : 0) +
+                    (showSuggestions ? 1 : 0);
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  itemCount: itemCount,
+                  itemBuilder: (context, index) {
+                    if (index < state.messages.length) {
                       final message = state.messages[index];
-                      final isRichCard = message.type != ChatMessageType.text &&
-                          message.type != ChatMessageType.error;
+                      final isRichCard =
+                          message.type != ChatMessageType.text &&
+                              message.type != ChatMessageType.error;
                       return isRichCard
                           ? RichCardWidget(message: message)
                           : ChatBubble(message: message);
-                    },
-                  ),
-          ),
-          SuggestedPrompts(
-            prompts: state.suggestedPrompts,
-            onSelected: viewModel.sendMessage,
+                    }
+                    final offset = index - state.messages.length;
+                    if (hasTyping && offset == 0) {
+                      return const TypingIndicator();
+                    }
+                    return SuggestedPrompts(
+                      prompts: state.suggestedPrompts,
+                      onSelected: viewModel.sendMessage,
+                    );
+                  },
+                );
+              },
+            ),
           ),
           const Divider(height: 1),
           MessageComposer(
             enabled: !state.isBusy,
             isListening: state.status == ChatStatus.listening,
+            dictationText: state.voiceDraft,
             onSend: viewModel.sendMessage,
             onMicPressed: () {
               if (state.status == ChatStatus.listening) {
                 viewModel.stopVoiceInput();
               } else {
                 viewModel.startVoiceInput();
+              }
+            },
+            onVoiceConversation: () async {
+              final recording = await RecordingDialog.show(context);
+              if (recording != null) {
+                await viewModel.submitVoiceRecording(recording);
               }
             },
           ),

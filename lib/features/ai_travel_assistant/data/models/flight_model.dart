@@ -23,6 +23,19 @@ class FlightModel with _$FlightModel {
 
   factory FlightModel.fromJson(Map<String, dynamic> json) => _$FlightModelFromJson(json);
 
+  factory FlightModel.fromEntity(Flight e) => FlightModel(
+        flightNumber: e.flightNumber,
+        origin: e.origin,
+        destination: e.destination,
+        status: e.status.name,
+        scheduledDeparture: e.scheduledDeparture.toIso8601String(),
+        estimatedDeparture: e.estimatedDeparture?.toIso8601String(),
+        gate: e.gate,
+        terminal: e.terminal,
+        checkInCounter: e.checkInCounter,
+        boardingTime: e.boardingTime?.toIso8601String(),
+      );
+
   Flight toEntity() {
     return Flight(
       flightNumber: flightNumber,

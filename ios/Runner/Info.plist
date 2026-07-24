@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TravelBuddy uses the microphone so you can talk to your travel assistant by voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>TravelBuddy transcribes your speech so it can understand voice requests.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

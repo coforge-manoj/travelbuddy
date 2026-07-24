@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
+import 'package:ai_travel_assistant/core/config/app_env.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/agent_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/airport_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/baggage_remote_datasource.dart';
@@ -9,6 +10,9 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/flight_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/seat_remote_datasource.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/services/llm/custom_llm_service.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/services/llm/llm_service.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/services/llm/mock_llm_service.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/agent_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/airport_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/baggage_repository_impl.dart';
@@ -32,6 +36,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_flight_status_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_seat_map_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/run_assistant_turn_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
@@ -195,6 +200,46 @@ final loadChatHistoryUseCaseProvider = Provider<LoadChatHistoryUseCase>((ref) {
 
 final saveChatMessageUseCaseProvider = Provider<SaveChatMessageUseCase>((ref) {
   return SaveChatMessageUseCase(ref.watch(chatHistoryRepositoryProvider));
+});
+
+final clearChatHistoryUseCaseProvider = Provider<ClearChatHistoryUseCase>((ref) {
+  return ClearChatHistoryUseCase(ref.watch(chatHistoryRepositoryProvider));
+});
+
+// ---------------------------------------------------------------------------
+// LLM (Gemini) + assistant orchestrator
+// ---------------------------------------------------------------------------
+
+/// The LLM adapter behind the Generative-UI loop. Uses the custom
+/// OpenAI-compatible gateway (Gemini Flash 2.5 via the Coforge QAG router) when
+/// `CUSTOM_LLM_URL` + `CUSTOM_LLM_API_KEY` are set, and otherwise falls back to
+/// [MockLlmService] so the assistant — and every rich card, including seat
+/// selection — works fully offline with no API key. Force either one by
+/// overriding this provider in a `ProviderScope`.
+final llmServiceProvider = Provider<LlmService>((ref) {
+  if (AppEnv.hasCustomLlm) {
+    return CustomLlmService(
+      url: AppEnv.customLlmUrl,
+      model: AppEnv.customLlmModel,
+    );
+  }
+  return MockLlmService();
+});
+
+/// Runs one assistant turn: Gemini picks a tool → the matching use case runs
+/// against the (mock) backend → a summary + rich card message(s) come back.
+/// Replaces the old keyword `ClassifyIntent` routing.
+final runAssistantTurnUseCaseProvider = Provider<RunAssistantTurnUseCase>((ref) {
+  return RunAssistantTurnUseCase(
+    llmService: ref.watch(llmServiceProvider),
+    apiKey: () => AppEnv.customLlmApiKey,
+    getFlightStatus: ref.watch(getFlightStatusUseCaseProvider),
+    getSeatMap: ref.watch(getSeatMapUseCaseProvider),
+    getBaggageOptions: ref.watch(getBaggageOptionsUseCaseProvider),
+    getBaggageAllowance: ref.watch(getBaggageAllowanceUseCaseProvider),
+    getAirportDetails: ref.watch(getAirportDetailsUseCaseProvider),
+    escalateToAgent: ref.watch(escalateToAgentUseCaseProvider),
+  );
 });
 
 // Note: `chatViewModelProvider` itself lives in

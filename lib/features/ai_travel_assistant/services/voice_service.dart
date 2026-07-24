@@ -1,6 +1,25 @@
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+/// What a finished voice-mode-2 recording produces: the replayable audio
+/// location plus the speech-to-text transcript captured live while recording.
+class AudioRecordingResult {
+  const AudioRecordingResult({
+    this.audioPath,
+    required this.transcript,
+    required this.duration,
+  });
+
+  /// Local file path (mobile/desktop) or blob URL (web).
+  ///
+  /// Null on Android when only speech-to-text was used: the platform cannot
+  /// share the microphone between [record] and [speech_to_text], so we skip
+  /// the file to avoid a native crash and still return a live transcript.
+  final String? audioPath;
+  final String transcript;
+  final Duration duration;
+}
+
 /// Wraps speech-to-text (voice input) and text-to-speech (voice output)
 /// behind a single, platform-agnostic surface so the ViewModel/UI never
 /// touch the underlying plugins directly.
@@ -35,15 +54,24 @@ class VoiceService {
     required void Function(String transcript, bool isFinal) onResult,
     String localeId = 'en_US',
   }) async {
-    final ready = await ensureReady();
-    if (!ready) return false;
+    try {
+      final ready = await ensureReady();
+      if (!ready) return false;
 
-    await _speech.listen(
-      onResult: (result) => onResult(result.recognizedWords, result.finalResult),
-      localeId: localeId,
-      listenOptions: stt.SpeechListenOptions(partialResults: true, cancelOnError: true),
-    );
-    return true;
+      await _speech.listen(
+        onResult: (result) =>
+            onResult(result.recognizedWords, result.finalResult),
+        listenOptions: stt.SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: true,
+          localeId: localeId,
+        ),
+      );
+      return true;
+    } catch (_) {
+      _speechInitialized = false;
+      return false;
+    }
   }
 
   Future<void> stopListening() => _speech.stop();

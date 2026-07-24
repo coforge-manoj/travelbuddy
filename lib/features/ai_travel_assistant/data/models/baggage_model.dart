@@ -33,6 +33,13 @@ class BaggageOptionModel with _$BaggageOptionModel {
   factory BaggageOptionModel.fromJson(Map<String, dynamic> json) =>
       _$BaggageOptionModelFromJson(json);
 
+  factory BaggageOptionModel.fromEntity(BaggageOption e) => BaggageOptionModel(
+        id: e.id,
+        extraWeightKg: e.extraWeightKg,
+        price: e.price,
+        currency: e.currency,
+      );
+
   BaggageOption toEntity() =>
       BaggageOption(id: id, extraWeightKg: extraWeightKg, price: price, currency: currency);
 }
@@ -50,6 +57,13 @@ class BaggagePurchaseModel with _$BaggagePurchaseModel {
 
   factory BaggagePurchaseModel.fromJson(Map<String, dynamic> json) =>
       _$BaggagePurchaseModelFromJson(json);
+
+  factory BaggagePurchaseModel.fromEntity(BaggagePurchase e) => BaggagePurchaseModel(
+        id: e.id,
+        option: BaggageOptionModel.fromEntity(e.option),
+        status: e.status.name,
+        confirmationCode: e.confirmationCode,
+      );
 
   BaggagePurchase toEntity() {
     return BaggagePurchase(

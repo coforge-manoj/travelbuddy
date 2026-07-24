@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:hive/hive.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/chat_message_model.dart';
 
@@ -20,11 +22,18 @@ class HiveChatLocalDataSource implements ChatLocalDataSource {
   @override
   Future<List<ChatMessageModel>> loadHistory() async {
     final messages = _box.values
-        .map((raw) => ChatMessageModel.fromJson(Map<String, dynamic>.from(raw)))
+        .map((raw) => ChatMessageModel.fromJson(_normalize(raw)))
         .toList();
     messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     return messages;
   }
+
+  /// Hive returns nested maps as `Map<dynamic, dynamic>`, but the generated
+  /// `fromJson` casts nested objects (e.g. a card payload) to
+  /// `Map<String, dynamic>`. A JSON round-trip deep-converts every level to the
+  /// String-keyed maps and typed lists `fromJson` expects.
+  Map<String, dynamic> _normalize(Map<dynamic, dynamic> raw) =>
+      jsonDecode(jsonEncode(raw)) as Map<String, dynamic>;
 
   @override
   Future<void> saveMessage(ChatMessageModel message) async {

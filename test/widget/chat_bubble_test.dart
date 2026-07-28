@@ -34,7 +34,7 @@ void main() {
       MaterialApp(home: Scaffold(body: ChatBubble(message: message))),
     );
 
-    final align = tester.widget<Align>(find.byType(Align));
-    expect(align.alignment, Alignment.centerRight);
+    final row = tester.widget<Row>(find.byType(Row));
+    expect(row.mainAxisAlignment, MainAxisAlignment.end);
   });
 }

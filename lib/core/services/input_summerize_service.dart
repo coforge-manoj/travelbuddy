@@ -1,79 +1,29 @@
 import 'dart:convert';
+
+import 'package:ai_travel_assistant/features/flight_assistant_chat/data/models/user_intent_result_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
-import '../../features/ai_travel_assistant/data/models/summerized_input_result_model.dart';
-import '../enum/flight_input_type.dart';
+class QueryUnderstandingService {
+  QueryUnderstandingService._();
 
-/// ---------------------------------------------------------------------------
-/// InputSummarizeService
-/// ---------------------------------------------------------------------------
-///
-/// Responsibilities:
-/// 1. Cleans speech-to-text input by removing fillers and fixing grammar.
-/// 2. Detects the user's intent using Gemini.
-/// 3. Returns a [SummarizedInputResult] containing:
-///    - cleanedText
-///    - detected FlightInputType
-///
-/// Example:
-///
-/// Input:
-/// "umm i need extra 10kg baggage"
-///
-/// Output:
-/// SummarizedInputResult(
-///   cleanedText: "I need an extra 10 kg baggage allowance.",
-///   inputType: FlightInputType.addBaggage,
-/// )
-///
-class InputSummarizeService {
-  InputSummarizeService._();
+  static final QueryUnderstandingService instance =
+      QueryUnderstandingService._();
 
-  /// Singleton instance.
-  static final InputSummarizeService instance = InputSummarizeService._();
-
-  /// LLM API endpoint.
   final String _apiUrl = dotenv.env['API_URL'] ?? '';
-
-  /// API key used for authentication.
   final String _apiKey = dotenv.env['API_KEY'] ?? '';
-
-  /// Model name configured in .env.
   final String _model = dotenv.env['MODEL_NAME'] ?? 'gemini-2-5-flash';
 
-  /// -------------------------------------------------------------------------
-  /// summarizeInput
-  /// -------------------------------------------------------------------------
-  ///
-  /// Sends the user input to the LLM and returns:
-  /// - Cleaned text
-  /// - Detected intent
-  ///
-  /// Supported intents:
-  /// - flightStatus
-  /// - seatSelection
-  /// - addBaggage
-  /// - checkInCounterAndTerminal
-  /// - baggageAllowance
-  /// - boardingTime
-  /// - airportNavigation
-  /// - travelDocuments
-  /// - other
-  ///
-  Future<SummarizedInputResult> summarizeInput(
-    String input,
-  ) async {
+  Future<UserIntentResult> summarizeInput(String input) async {
     try {
-      /// Return default result when input is empty.
       if (input.trim().isEmpty) {
-        return SummarizedInputResult(
+        return const UserIntentResult(
           cleanedText: '',
-          inputType: FlightInputType.other,
+          intent: 'unknown',
+          filters: {},
         );
       }
 
-      /// Call the LLM endpoint.
       final response = await http.post(
         Uri.parse(_apiUrl),
         headers: {
@@ -86,31 +36,134 @@ class InputSummarizeService {
             {
               "role": "system",
               "content": """
-You are an intent detection assistant.
+You are an AI Flight Assistant.
 
-Your tasks:
-1. Clean speech-to-text input.
-2. Detect intent.
+Your task is to understand the user's query and convert it into structured JSON.
 
-Available intent types:
+Return ONLY valid JSON.
 
-- flightStatus
-- seatSelection
-- addBaggage
-- checkInCounterAndTerminal
-- baggageAllowance
-- boardingTime
-- airportNavigation
-- travelDocuments
-- other
-
-Return ONLY JSON.
-
-Example:
+Schema:
 
 {
-  "cleanedText":"What is my boarding time?",
-  "inputType":"boardingTime"
+  "cleanedText": "",
+  "action": "",
+  "filters": {}
+}
+
+Allowed actions:
+
+flightStatus
+seatSelection
+addBaggage
+checkInCounterAndTerminal
+baggageAllowance
+boardingTime
+airportNavigation
+travelDocuments
+other
+
+Instructions:
+
+1. Clean speech-to-text mistakes.
+2. Detect the most suitable action.
+3. Extract all useful entities into filters.
+4. Destination, flight number, airline, baggage weight,
+   seat type, terminal, gate etc should be extracted when available.
+5. If query doesn't match any action then use "other".
+6. Return ONLY JSON.
+7. No markdown.
+8. No explanation.
+
+Examples:
+
+User:
+What is the status of my London flight?
+
+Output:
+{
+  "cleanedText":"What is the status of my London flight?",
+  "action":"flightStatus",
+  "filters":{
+    "destination":"London"
+  }
+}
+
+User:
+Show available window seats
+
+Output:
+{
+  "cleanedText":"Show available window seats",
+  "action":"seatSelection",
+  "filters":{
+    "seatType":"window"
+  }
+}
+
+User:
+Can I add 15 kg baggage?
+
+Output:
+{
+  "cleanedText":"Can I add 15 kg baggage?",
+  "action":"addBaggage",
+  "filters":{
+    "weight":"15kg"
+  }
+}
+
+User:
+What baggage allowance do I have?
+
+Output:
+{
+  "cleanedText":"What baggage allowance do I have?",
+  "action":"baggageAllowance",
+  "filters":{}
+}
+
+User:
+Where is terminal 3 check-in counter?
+
+Output:
+{
+  "cleanedText":"Where is terminal 3 check-in counter?",
+  "action":"checkInCounterAndTerminal",
+  "filters":{
+    "terminal":"3"
+  }
+}
+
+User:
+When does boarding start?
+
+Output:
+{
+  "cleanedText":"When does boarding start?",
+  "action":"boardingTime",
+  "filters":{}
+}
+
+User:
+How do I reach gate A12?
+
+Output:
+{
+  "cleanedText":"How do I reach gate A12?",
+  "action":"airportNavigation",
+  "filters":{
+    "gate":"A12"
+  }
+}
+
+User:
+Do I need a passport?
+
+Output:
+{
+  "cleanedText":"Do I need a passport?",
+  "action":"travelDocuments",
+  "filters":{}
 }
 """
             },
@@ -123,57 +176,26 @@ Example:
         }),
       );
 
-      /// Parse API response.
       final data = jsonDecode(response.body);
 
-      /// Extract the model content.
       final content = data['choices'][0]['message']['content'].toString();
 
-      /// Remove markdown code block wrappers if Gemini adds them.
-      ///
-      /// Example:
-      /// ```json
-      /// {
-      ///   "cleanedText":"..."
-      /// }
-      /// ```
       final cleanedContent =
           content.replaceAll('```json', '').replaceAll('```', '').trim();
 
-      print('CLEANED RESPONSE => $cleanedContent');
+      print('INTENT RESPONSE => $cleanedContent');
 
-      /// Convert JSON string into a Map.
-      final result = jsonDecode(cleanedContent);
+      final result = jsonDecode(cleanedContent) as Map<String, dynamic>;
 
-      /// Read intent safely from response.
-      final intent = result['inputType']?.toString().trim() ?? 'other';
-
-      /// Convert string intent to enum.
-      return SummarizedInputResult(
-        cleanedText: result['cleanedText']?.toString() ?? input,
-        inputType: FlightInputType.values.firstWhere(
-          (e) => e.name.toLowerCase() == intent.toLowerCase(),
-          orElse: () => FlightInputType.other,
-        ),
-      );
+      return UserIntentResult.fromJson(result);
     } catch (e) {
-      /// Fallback in case:
-      /// - API failure
-      /// - Invalid JSON
-      /// - Unexpected model response
-      print(e);
+      print('InputSummarizeService Error: $e');
 
-      return SummarizedInputResult(
+      return UserIntentResult(
         cleanedText: input,
-        inputType: FlightInputType.other,
+        intent: 'unknown',
+        filters: const {},
       );
     }
   }
 }
-
-
-
-///
-//  final SummarizedInputResult result =
-//     await InputSummarizeService.instance.summarizeInput(text);
-// here you'll get into result type and msg.

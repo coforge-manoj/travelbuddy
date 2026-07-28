@@ -4,12 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/airport_info.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/airport/airport_info_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmation_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_offers_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_status_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/seat_map_card.dart';
 
@@ -28,6 +32,10 @@ class RichCardWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return switch (message.type) {
       ChatMessageType.flightStatusCard => FlightStatusCard(flight: message.payload! as Flight),
+      ChatMessageType.flightOffersCard =>
+        FlightOffersCard(offers: message.payload! as List<FlightOffer>),
+      ChatMessageType.bookingConfirmationCard =>
+        BookingConfirmationCard(booking: message.payload! as Booking),
       ChatMessageType.seatMapCard => SeatMapCard(seatMap: message.payload! as SeatMap),
       ChatMessageType.baggageOptionsCard =>
         BaggageOptionsCard(options: message.payload! as List<BaggageOption>),

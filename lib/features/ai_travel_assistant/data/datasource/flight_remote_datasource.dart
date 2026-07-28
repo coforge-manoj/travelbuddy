@@ -2,11 +2,14 @@ import 'package:dio/dio.dart';
 import 'package:ai_travel_assistant/core/errors/exceptions.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/booking_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/flight_model.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/flight_offer_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart';
 
 abstract interface class FlightRemoteDataSource {
   Future<FlightModel> getFlightStatus(String flightNumber);
   Future<BookingModel> getBooking(String pnr);
+  Future<List<FlightOfferModel>> searchFlights({required String origin, required String destination});
+  Future<BookingModel> bookFlight({required String offerId, required String passengerName});
 }
 
 /// Talks to `GET /flight/status` and `GET /booking` on the airline backend.
@@ -28,6 +31,27 @@ class DioFlightRemoteDataSource implements FlightRemoteDataSource {
     final response = await _dio.get<Map<String, dynamic>>(
       '/booking',
       queryParameters: {'pnr': pnr},
+    );
+    return BookingModel.fromJson(response.data!);
+  }
+
+  @override
+  Future<List<FlightOfferModel>> searchFlights({
+    required String origin,
+    required String destination,
+  }) async {
+    final response = await _dio.get<List<dynamic>>(
+      '/flights/search',
+      queryParameters: {'origin': origin, 'destination': destination},
+    );
+    return response.data!.cast<Map<String, dynamic>>().map(FlightOfferModel.fromJson).toList();
+  }
+
+  @override
+  Future<BookingModel> bookFlight({required String offerId, required String passengerName}) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/booking',
+      data: {'offerId': offerId, 'passengerName': passengerName},
     );
     return BookingModel.fromJson(response.data!);
   }
@@ -53,6 +77,25 @@ class MockFlightRemoteDataSource implements FlightRemoteDataSource {
     _maybeThrowNetworkFailure();
     if (pnr.trim().isEmpty) throw const InvalidBookingException();
     return _server.booking(pnr);
+  }
+
+  @override
+  Future<List<FlightOfferModel>> searchFlights({
+    required String origin,
+    required String destination,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    _maybeThrowNetworkFailure();
+    return _server.searchFlights(origin: origin, destination: destination);
+  }
+
+  @override
+  Future<BookingModel> bookFlight({required String offerId, required String passengerName}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    _maybeThrowNetworkFailure();
+    final booking = _server.bookFlight(offerId: offerId, passengerName: passengerName);
+    if (booking == null) throw const PaymentDeclinedException();
+    return booking;
   }
 
   void _maybeThrowNetworkFailure() {

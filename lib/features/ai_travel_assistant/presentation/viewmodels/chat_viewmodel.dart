@@ -7,6 +7,7 @@ import 'package:ai_travel_assistant/core/di/providers.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/book_flight_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/classify_intent_usecase.dart';
@@ -16,6 +17,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_flight_status_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_seat_map_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/search_flights_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
@@ -29,6 +31,10 @@ const _uuid = Uuid();
 const _demoFlightNumber = 'FZ123';
 const _demoPnr = 'ABC123';
 const _demoAirportCode = 'DXB';
+const _demoTravelerFirstName = 'Joe';
+const _demoTravelerFullName = 'Joe Traveler';
+const _demoSearchOrigin = 'EWR';
+const _demoSearchDestination = 'ORD';
 
 /// The single orchestrator behind the chat screen: sends user text through
 /// intent classification, then routes to the right use case (flight status,
@@ -46,7 +52,9 @@ class ChatViewModel extends StateNotifier<ChatState> {
     required PurchaseBaggageUseCase purchaseBaggageUseCase,
     required GetAirportDetailsUseCase getAirportDetailsUseCase,
     required EscalateToAgentUseCase escalateToAgentUseCase,
-    required LoadChatHistoryUseCase loadChatHistoryUseCase,
+    required SearchFlightsUseCase searchFlightsUseCase,
+    required BookFlightUseCase bookFlightUseCase,
+    required ClearChatHistoryUseCase clearChatHistoryUseCase,
     required SaveChatMessageUseCase saveChatMessageUseCase,
     required VoiceService voiceService,
   })  : _sendMessageUseCase = sendMessageUseCase,
@@ -58,11 +66,13 @@ class ChatViewModel extends StateNotifier<ChatState> {
         _purchaseBaggageUseCase = purchaseBaggageUseCase,
         _getAirportDetailsUseCase = getAirportDetailsUseCase,
         _escalateToAgentUseCase = escalateToAgentUseCase,
-        _loadChatHistoryUseCase = loadChatHistoryUseCase,
+        _searchFlightsUseCase = searchFlightsUseCase,
+        _bookFlightUseCase = bookFlightUseCase,
+        _clearChatHistoryUseCase = clearChatHistoryUseCase,
         _saveChatMessageUseCase = saveChatMessageUseCase,
         _voiceService = voiceService,
         super(const ChatState()) {
-    _loadHistory();
+    _startNewSession();
   }
 
   final SendMessageUseCase _sendMessageUseCase;
@@ -74,33 +84,68 @@ class ChatViewModel extends StateNotifier<ChatState> {
   final PurchaseBaggageUseCase _purchaseBaggageUseCase;
   final GetAirportDetailsUseCase _getAirportDetailsUseCase;
   final EscalateToAgentUseCase _escalateToAgentUseCase;
-  final LoadChatHistoryUseCase _loadChatHistoryUseCase;
+  final SearchFlightsUseCase _searchFlightsUseCase;
+  final BookFlightUseCase _bookFlightUseCase;
+  final ClearChatHistoryUseCase _clearChatHistoryUseCase;
   final SaveChatMessageUseCase _saveChatMessageUseCase;
   final VoiceService _voiceService;
 
-  Future<void> _loadHistory() async {
-    state = state.copyWith(status: ChatStatus.loadingHistory);
-    final result = await _loadChatHistoryUseCase();
-    result.fold(
-      (failure) => state = state.copyWith(status: ChatStatus.idle, messages: _welcomeMessages()),
-      (history) => state = state.copyWith(
-        status: ChatStatus.idle,
-        messages: history.isEmpty ? _welcomeMessages() : history,
+  /// Every fresh entry into the chat screen (including navigating back and
+  /// re-opening it — see the `autoDispose` on [chatViewModelProvider], which
+  /// tears this view model down when nothing is watching it) starts a clean
+  /// session: any previous local history is discarded, and a welcome message
+  /// plus a proactive flight-offer suggestion seed the conversation.
+  Future<void> _startNewSession() async {
+    unawaited(_clearChatHistoryUseCase());
+
+    final welcome = ChatMessage(
+      id: _uuid.v4(),
+      role: ChatRole.assistant,
+      type: ChatMessageType.text,
+      timestamp: DateTime.now(),
+      text: 'Hello $_demoTravelerFirstName! How can I help you today?',
+    );
+    state = state.copyWith(status: ChatStatus.sendingMessage, messages: [welcome]);
+    unawaited(_saveChatMessageUseCase(welcome));
+
+    final offersResult = await _searchFlightsUseCase(
+      origin: _demoSearchOrigin,
+      destination: _demoSearchDestination,
+    );
+    offersResult.fold(
+      (failure) => _appendError(failure.message),
+      (offers) => _appendMessage(
+        ChatMessage(
+          id: _uuid.v4(),
+          role: ChatRole.assistant,
+          type: ChatMessageType.flightOffersCard,
+          timestamp: DateTime.now(),
+          text: 'Here are a few flight options from Newark to Chicago — pick one to get started.',
+          payload: offers,
+        ),
       ),
     );
+    state = state.copyWith(status: ChatStatus.idle);
   }
 
-  List<ChatMessage> _welcomeMessages() {
-    return [
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: "Hi! I'm your travel assistant. Ask me about your flight, "
-            'seat, baggage, or how to get to your gate.',
+  /// Called once the passenger taps "Select" on a [FlightOffersCard] entry.
+  Future<void> selectFlightOffer(String offerId) async {
+    state = state.copyWith(status: ChatStatus.sendingMessage);
+    final result = await _bookFlightUseCase(offerId: offerId, passengerName: _demoTravelerFullName);
+    result.fold(
+      (failure) => _appendError(failure.message),
+      (booking) => _appendMessage(
+        ChatMessage(
+          id: _uuid.v4(),
+          role: ChatRole.assistant,
+          type: ChatMessageType.bookingConfirmationCard,
+          timestamp: DateTime.now(),
+          text: 'Your flight is booked.',
+          payload: booking,
+        ),
       ),
-    ];
+    );
+    state = state.copyWith(status: ChatStatus.idle);
   }
 
   /// Entry point for the composer and suggested-prompt chips.
@@ -390,7 +435,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 }
 
-final chatViewModelProvider = StateNotifierProvider<ChatViewModel, ChatState>((ref) {
+/// `autoDispose` so every fresh push of `ChatPage` (e.g. navigating back to
+/// the host app and re-opening the assistant) gets a brand-new
+/// [ChatViewModel] — and therefore a reset session — instead of resuming
+/// whatever state the previous visit left behind.
+final chatViewModelProvider = StateNotifierProvider.autoDispose<ChatViewModel, ChatState>((ref) {
   return ChatViewModel(
     sendMessageUseCase: ref.watch(sendMessageUseCaseProvider),
     classifyIntentUseCase: ref.watch(classifyIntentUseCaseProvider),
@@ -401,7 +450,9 @@ final chatViewModelProvider = StateNotifierProvider<ChatViewModel, ChatState>((r
     purchaseBaggageUseCase: ref.watch(purchaseBaggageUseCaseProvider),
     getAirportDetailsUseCase: ref.watch(getAirportDetailsUseCaseProvider),
     escalateToAgentUseCase: ref.watch(escalateToAgentUseCaseProvider),
-    loadChatHistoryUseCase: ref.watch(loadChatHistoryUseCaseProvider),
+    searchFlightsUseCase: ref.watch(searchFlightsUseCaseProvider),
+    bookFlightUseCase: ref.watch(bookFlightUseCaseProvider),
+    clearChatHistoryUseCase: ref.watch(clearChatHistoryUseCaseProvider),
     saveChatMessageUseCase: ref.watch(saveChatMessageUseCaseProvider),
     voiceService: ref.watch(voiceServiceProvider),
   );

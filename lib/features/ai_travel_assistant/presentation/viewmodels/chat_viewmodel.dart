@@ -22,6 +22,10 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
+import '../../../../core/services/input_summerize_service.dart';
+import '../../data/models/chat_context_model.dart';
+import '../../data/models/user_intent_result_model.dart';
+
 const _uuid = Uuid();
 
 /// Hard-codes the active booking context for this module's standalone demo.
@@ -108,25 +112,34 @@ class ChatViewModel extends StateNotifier<ChatState> {
     state = state.copyWith(status: ChatStatus.sendingMessage, messages: [welcome]);
     unawaited(_saveChatMessageUseCase(welcome));
 
-    final offersResult = await _searchFlightsUseCase(
-      origin: _demoSearchOrigin,
-      destination: _demoSearchDestination,
-    );
-    offersResult.fold(
-      (failure) => _appendError(failure.message),
-      (offers) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.flightOffersCard,
-          timestamp: DateTime.now(),
-          text: 'Here are a few flight options from Newark to Chicago — pick one to get started.',
-          payload: offers,
-        ),
-      ),
-    );
+    // final offersResult = await _searchFlightsUseCase(
+    //   origin: _demoSearchOrigin,
+    //   destination: _demoSearchDestination,
+    // );
+    // offersResult.fold(
+    //       (failure) => _appendError(failure.message),
+    //       (offers) => _appendMessage(
+    //     ChatMessage(
+    //       id: _uuid.v4(),
+    //       role: ChatRole.assistant,
+    //       type: ChatMessageType.flightOffersCard,
+    //       timestamp: DateTime.now(),
+    //       text: 'Here are a few flight options from Newark to Chicago — pick one to get started.',
+    //       payload: offers,
+    //     ),
+    //   ),
+    // );
+
     state = state.copyWith(status: ChatStatus.idle);
   }
+
+
+
+
+
+
+
+
 
   /// Called once the passenger taps "Select" on a [FlightOffersCard] entry.
   Future<void> selectFlightOffer(String offerId) async {
@@ -162,6 +175,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: trimmed,
       ),
     );
+
     state = state.copyWith(status: ChatStatus.sendingMessage, clearError: true);
 
     final intentResult = await _classifyIntentUseCase(trimmed);
@@ -180,6 +194,8 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
 
     switch (intent.type) {
+      case IntentType.searchFlights:
+        _handleFligtSearch(intent);
       case IntentType.flightStatus:
       case IntentType.boardingTime:
         await _handleFlightStatus();
@@ -201,7 +217,20 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 
   Future<void> _handleFlightStatus() async {
-    final result = await _getFlightStatusUseCase(_demoFlightNumber);
+
+
+
+      final flight = state.context.activeFlight;
+
+      if (flight == null) {
+        _appendError('Please select a flight first.');
+        return;
+      }
+
+      print(flight.flightNumber);
+
+
+    final result = await _getFlightStatusUseCase(flight.flightNumber);
     result.fold(
       (failure) => _appendError(failure.message),
       (flight) => _appendMessage(
@@ -233,6 +262,62 @@ class ChatViewModel extends StateNotifier<ChatState> {
       ),
     );
   }
+
+
+
+
+
+
+
+
+
+  Future<void> _handleFligtSearch(IntentResult intent) async {
+    final offersResult = await _searchFlightsUseCase(
+      origin: intent.entities['source'] ?? '',
+      destination: intent.entities['destination'] ?? '',
+    );
+
+    offersResult.fold(
+          (failure) {
+        _appendError(failure.message);
+
+        state = state.copyWith(
+          status: ChatStatus.idle,
+        );
+      },
+          (offers) {
+        _appendMessage(
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatRole.assistant,
+            type: ChatMessageType.flightOffersCard,
+            timestamp: DateTime.now(),
+            text:
+            'Here are a few flight options. Select one to continue.',
+            payload: offers,
+          ),
+        );
+
+        state = state.copyWith(
+          status: ChatStatus.idle,
+          context: state.context.copyWith(
+            activeFlight:
+            offers.length == 1 ? offers.first : null,
+            lastFlightSearchResults: offers,
+          ),
+        );
+      },
+    );
+  }
+
+
+
+
+
+
+
+
+
 
   /// Called by the seat-selection UI (Phase 8) once the passenger taps a seat.
   Future<void> confirmSeatChange(String seatNumber) async {

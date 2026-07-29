@@ -1,4 +1,3 @@
-import 'package:ai_travel_assistant/features/flight_assistant_chat/presentation/pages/ai_chat_page_dummy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

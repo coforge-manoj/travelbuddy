@@ -7,6 +7,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/fli
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/flight_offer_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/seat_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
+import 'package:ai_travel_assistant/local_data/local_flight_data.dart';
 
 /// A single in-memory "server" shared by every `Mock*RemoteDataSource`, so a
 /// demo session behaves consistently — e.g. a seat selected via
@@ -45,24 +46,73 @@ class MockBackendServer {
   // ---------------------------------------------------------------------
   // Flights / booking
   // ---------------------------------------------------------------------
+
+
   final Map<String, FlightModel> _flights = {};
 
   FlightModel flight(String flightNumber) {
-    return _flights.putIfAbsent(flightNumber, () {
-      final now = DateTime.now();
-      return FlightModel(
-        flightNumber: flightNumber,
-        origin: 'DXB',
-        destination: 'LHR',
-        status: 'delayed',
-        scheduledDeparture: now.add(const Duration(hours: 2)).toIso8601String(),
-        estimatedDeparture: now.add(const Duration(hours: 2, minutes: 35)).toIso8601String(),
-        gate: 'B12',
-        terminal: '2',
-        checkInCounter: '14-18',
-        boardingTime: now.add(const Duration(hours: 1, minutes: 40)).toIso8601String(),
-      );
-    });
+    return _flights.putIfAbsent(
+      flightNumber,
+          () {
+        final flights = flightsData['flights'] as List<dynamic>;
+
+        final flightJson = flights.cast<Map<String, dynamic>>().firstWhere(
+              (flight) =>
+          (flight['flightNumber'] ?? '')
+              .toString()
+              .toLowerCase() ==
+              flightNumber.toLowerCase(),
+          orElse: () => <String, dynamic>{},
+        );
+
+        if (flightJson.isEmpty) {
+          throw Exception(
+            'Flight not found for flight number: $flightNumber',
+          );
+        }
+
+        return FlightModel(
+          flightNumber:
+          flightJson['flightNumber']?.toString() ?? '',
+
+          origin:
+          flightJson['origin']?['iata']?.toString() ?? '',
+
+          destination:
+          flightJson['destination']?['iata']?.toString() ?? '',
+
+          status:
+          flightJson['status']?['flightStatus']?.toString() ??
+              'Unknown',
+
+          scheduledDeparture:
+          flightJson['schedule']?['scheduledDeparture']
+              ?.toString() ??
+              '',
+
+          estimatedDeparture:
+          flightJson['schedule']?['estimatedDeparture']
+              ?.toString() ??
+              '',
+
+          gate:
+          flightJson['origin']?['gate']?.toString() ?? '',
+
+          terminal:
+          flightJson['origin']?['terminal']?.toString() ?? '',
+
+          // JSON me currently counter nahi hai
+          checkInCounter:
+          flightJson['checkIn']?['counter']?.toString() ??
+              '',
+
+          boardingTime:
+          flightJson['schedule']?['boardingTime']
+              ?.toString() ??
+              '',
+        );
+      },
+    );
   }
 
   BookingModel booking(String pnr) {
@@ -78,32 +128,69 @@ class MockBackendServer {
     required String origin,
     required String destination,
   }) {
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
-    DateTime depart(int hour, int minute) =>
-        DateTime(tomorrow.year, tomorrow.month, tomorrow.day, hour, minute);
 
-    final offers = <(String, String, int, int, int, int, num, int)>[
-      ('United Airlines', 'UA482', 6, 45, 8, 58, 189, 0),
-      ('American Airlines', 'AA1190', 9, 15, 11, 30, 214, 0),
-      ('Delta Air Lines', 'DL2071', 12, 30, 15, 40, 176, 1),
-      ('JetBlue', 'B6935', 17, 5, 19, 22, 165, 0),
-    ];
 
-    return [
-      for (final (airline, flightNumber, dh, dm, ah, am, price, stops) in offers)
-        FlightOfferModel(
-          id: flightNumber,
-          airline: airline,
-          flightNumber: flightNumber,
-          origin: origin,
-          destination: destination,
-          departureTime: depart(dh, dm).toIso8601String(),
-          arrivalTime: depart(ah, am).toIso8601String(),
-          price: price,
-          stops: stops,
-        ),
-    ];
+      final flights = flightsData['flights'] as List<dynamic>? ?? [];
+
+      final filteredFlights = flights.where((flight) {
+        final flightMap = flight as Map<String, dynamic>;
+
+        final flightOrigin =
+        (flightMap['origin']?['city'] ?? '')
+            .toString()
+            .toLowerCase();
+
+        final flightDestination =
+        (flightMap['destination']?['city'] ?? '')
+            .toString()
+            .toLowerCase();
+
+        final normalizedOrigin = origin.trim().toLowerCase();
+        final normalizedDestination = destination.trim().toLowerCase();
+
+        final originMatch =
+            normalizedOrigin.isEmpty ||
+                flightOrigin == normalizedOrigin;
+
+        final destinationMatch =
+            normalizedDestination.isEmpty ||
+                flightDestination == normalizedDestination;
+
+        return originMatch && destinationMatch;
+      }).toList();
+
+      return filteredFlights.map((flight) {
+        final flightMap = flight as Map<String, dynamic>;
+
+        return FlightOfferModel(
+          id: flightMap['flightId']?.toString() ?? '',
+          airline:
+          flightMap['airline']?['name']?.toString() ?? '',
+          flightNumber:
+          flightMap['flightNumber']?.toString() ?? '',
+          origin:
+          flightMap['origin']?['city']?.toString() ?? '',
+          destination:
+          flightMap['destination']?['city']?.toString() ?? '',
+          departureTime:
+          flightMap['schedule']?['scheduledDeparture']
+              ?.toString() ??
+              '',
+          arrivalTime:
+          flightMap['schedule']?['scheduledArrival']
+              ?.toString() ??
+              '',
+          price: 0,
+          stops: 0,
+        );
+      }).toList();
+
+
   }
+
+
+
+
 
   List<FlightOfferModel> searchFlights({required String origin, required String destination}) {
     final key = '$origin-$destination';

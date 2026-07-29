@@ -28,17 +28,47 @@ class FlightModel with _$FlightModel {
       flightNumber: flightNumber,
       origin: origin,
       destination: destination,
-      status: FlightStatus.values.firstWhere(
-        (s) => s.name == status,
-        orElse: () => FlightStatus.unknown,
-      ),
+      status: _mapStatus(status),
       scheduledDeparture: DateTime.parse(scheduledDeparture),
-      estimatedDeparture:
-          estimatedDeparture != null ? DateTime.parse(estimatedDeparture!) : null,
+      estimatedDeparture: estimatedDeparture != null
+          ? DateTime.parse(estimatedDeparture!)
+          : null,
       gate: gate,
       terminal: terminal,
       checkInCounter: checkInCounter,
-      boardingTime: boardingTime != null ? DateTime.parse(boardingTime!) : null,
+      boardingTime:
+      boardingTime != null
+          ? DateTime.parse(boardingTime!)
+          : null,
     );
+
+  }
+
+  FlightStatus _mapStatus(String? status) {
+    switch (status?.toLowerCase().trim()) {
+      case 'scheduled':
+        return FlightStatus.scheduled;
+
+      case 'boarding':
+        return FlightStatus.boarding;
+
+      case 'delayed':
+        return FlightStatus.delayed;
+
+      case 'departed':
+        return FlightStatus.departed;
+
+      case 'cancelled':
+        return FlightStatus.cancelled;
+
+      case 'landed':
+        return FlightStatus.landed;
+
+      case 'on time':
+        return FlightStatus.scheduled;
+
+      default:
+        return FlightStatus.unknown;
+    }
   }
 }

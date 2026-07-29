@@ -1,22 +1,23 @@
+
+
+var flightsData=
 {
-  "flights": [
+  "flights":
+  [
     {
       "flightId": "FL-1001",
       "flightNumber": "AA2245",
-
       "airline": {
         "name": "American Airlines",
         "code": "AA",
         "icao": "AAL"
       },
-
       "aircraft": {
         "model": "Boeing 737-800",
         "registration": "N123AA",
         "configuration": "3-3",
         "totalSeats": 180
       },
-
       "origin": {
         "airportName": "Miami International Airport",
         "iata": "MIA",
@@ -26,7 +27,6 @@
         "terminal": "N",
         "gate": "D35"
       },
-
       "destination": {
         "airportName": "Lynden Pindling International Airport",
         "iata": "NAS",
@@ -34,7 +34,6 @@
         "city": "Nassau",
         "country": "Bahamas"
       },
-
       "schedule": {
         "scheduledDeparture": "2026-07-27T18:05:00",
         "estimatedDeparture": "2026-07-27T18:45:00",
@@ -45,26 +44,22 @@
         "boardingTime": "2026-07-27T17:20:00",
         "boardingGateCloseTime": "2026-07-27T17:55:00"
       },
-
       "status": {
         "flightStatus": "Delayed",
         "delayMinutes": 40,
         "delayReason": "Operational Delay"
       },
-
       "checkIn": {
         "available": true,
         "status": "Not Checked In",
         "opensAt": "2026-07-26T18:05:00",
         "closesAt": "2026-07-27T17:05:00"
       },
-
       "boardingPass": {
         "available": false,
         "downloadUrl": null,
         "qrCode": null
       },
-
       "baggage": {
         "cabin": {
           "allowedWeight": "7kg",
@@ -92,7 +87,6 @@
           }
         ]
       },
-
       "meal": {
         "selectedMeal": "Standard Meal",
         "availableMeals": [
@@ -102,14 +96,12 @@
           "Kosher Meal"
         ]
       },
-
       "airport": {
         "securityWaitTimeMinutes": 18,
         "terminalMapAvailable": true,
         "loungeAccess": false,
         "priorityBoarding": false
       },
-
       "weather": {
         "departure": {
           "temperature": 31,
@@ -120,7 +112,6 @@
           "condition": "Partly Cloudy"
         }
       },
-
       "seatSelection": {
         "available": true,
         "selectedSeat": null,
@@ -157,24 +148,20 @@
         ]
       }
     },
-
     {
       "flightId": "FL-1002",
       "flightNumber": "DL1386",
-
       "airline": {
         "name": "Delta Air Lines",
         "code": "DL",
         "icao": "DAL"
       },
-
       "aircraft": {
         "model": "Airbus A321",
         "registration": "N456DL",
         "configuration": "3-3",
         "totalSeats": 190
       },
-
       "origin": {
         "airportName": "Miami International Airport",
         "iata": "MIA",
@@ -184,7 +171,6 @@
         "terminal": "S",
         "gate": "H08"
       },
-
       "destination": {
         "airportName": "Hartsfield Jackson Atlanta International Airport",
         "iata": "ATL",
@@ -192,7 +178,6 @@
         "city": "Atlanta",
         "country": "United States"
       },
-
       "schedule": {
         "scheduledDeparture": "2026-07-27T18:00:00",
         "estimatedDeparture": "2026-07-27T18:32:00",
@@ -203,26 +188,22 @@
         "boardingTime": "2026-07-27T17:15:00",
         "boardingGateCloseTime": "2026-07-27T17:50:00"
       },
-
       "status": {
         "flightStatus": "Delayed",
         "delayMinutes": 32,
         "delayReason": "Weather Conditions"
       },
-
       "checkIn": {
         "available": true,
         "status": "Checked In",
         "opensAt": "2026-07-26T18:00:00",
         "closesAt": "2026-07-27T17:00:00"
       },
-
       "boardingPass": {
         "available": true,
         "downloadUrl": "/boarding-pass/DL1386",
         "qrCode": "DL1386QR"
       },
-
       "baggage": {
         "cabin": {
           "allowedWeight": "7kg",
@@ -233,7 +214,6 @@
           "pieces": 1
         }
       },
-
       "meal": {
         "selectedMeal": "Vegetarian Meal",
         "availableMeals": [
@@ -242,14 +222,12 @@
           "Vegan Meal"
         ]
       },
-
       "airport": {
         "securityWaitTimeMinutes": 22,
         "terminalMapAvailable": true,
         "loungeAccess": true,
         "priorityBoarding": true
       },
-
       "weather": {
         "departure": {
           "temperature": 30,
@@ -260,31 +238,26 @@
           "condition": "Rain"
         }
       },
-
       "seatSelection": {
         "available": true,
         "selectedSeat": "14A",
         "rows": []
       }
     },
-
     {
       "flightId": "FL-1003",
       "flightNumber": "AV393",
-
       "airline": {
         "name": "Avianca",
         "code": "AV",
         "icao": "AVA"
       },
-
       "aircraft": {
         "model": "Airbus A320",
         "registration": "N778AV",
         "configuration": "3-3",
         "totalSeats": 174
       },
-
       "origin": {
         "airportName": "Miami International Airport",
         "iata": "MIA",
@@ -294,7 +267,6 @@
         "terminal": "S",
         "gate": "J12"
       },
-
       "destination": {
         "airportName": "Augusto C. Sandino International Airport",
         "iata": "MGA",
@@ -302,7 +274,6 @@
         "city": "Managua",
         "country": "Nicaragua"
       },
-
       "schedule": {
         "scheduledDeparture": "2026-07-27T18:00:00",
         "estimatedDeparture": "2026-07-27T18:00:00",
@@ -313,26 +284,22 @@
         "boardingTime": "2026-07-27T17:10:00",
         "boardingGateCloseTime": "2026-07-27T17:50:00"
       },
-
       "status": {
         "flightStatus": "Departed",
         "delayMinutes": 0,
         "delayReason": null
       },
-
       "checkIn": {
         "available": false,
         "status": "Closed",
         "opensAt": "2026-07-26T18:00:00",
         "closesAt": "2026-07-27T17:00:00"
       },
-
       "boardingPass": {
         "available": true,
         "downloadUrl": "/boarding-pass/AV393",
         "qrCode": "AV393QR"
       },
-
       "baggage": {
         "cabin": {
           "allowedWeight": "10kg",
@@ -343,7 +310,6 @@
           "pieces": 1
         }
       },
-
       "meal": {
         "selectedMeal": "Standard Meal",
         "availableMeals": [
@@ -351,14 +317,12 @@
           "Vegetarian Meal"
         ]
       },
-
       "airport": {
         "securityWaitTimeMinutes": 15,
         "terminalMapAvailable": true,
         "loungeAccess": false,
         "priorityBoarding": false
       },
-
       "weather": {
         "departure": {
           "temperature": 31,
@@ -369,31 +333,26 @@
           "condition": "Clear"
         }
       },
-
       "seatSelection": {
         "available": false,
         "selectedSeat": "8C",
         "rows": []
       }
     },
-
     {
       "flightId": "FL-1004",
       "flightNumber": "VS006",
-
       "airline": {
         "name": "Virgin Atlantic",
         "code": "VS",
         "icao": "VIR"
       },
-
       "aircraft": {
         "model": "Boeing 787 Dreamliner",
         "registration": "G-VNYC",
         "configuration": "3-3-3",
         "totalSeats": 264
       },
-
       "origin": {
         "airportName": "Miami International Airport",
         "iata": "MIA",
@@ -403,7 +362,6 @@
         "terminal": "S",
         "gate": "J17"
       },
-
       "destination": {
         "airportName": "Heathrow Airport",
         "iata": "LHR",
@@ -411,7 +369,6 @@
         "city": "London",
         "country": "United Kingdom"
       },
-
       "schedule": {
         "scheduledDeparture": "2026-07-27T18:05:00",
         "estimatedDeparture": "2026-07-27T18:05:00",
@@ -422,26 +379,22 @@
         "boardingTime": "2026-07-27T17:00:00",
         "boardingGateCloseTime": "2026-07-27T17:50:00"
       },
-
       "status": {
         "flightStatus": "Boarding",
         "delayMinutes": 0,
         "delayReason": null
       },
-
       "checkIn": {
         "available": true,
         "status": "Checked In",
         "opensAt": "2026-07-26T18:05:00",
         "closesAt": "2026-07-27T17:05:00"
       },
-
       "boardingPass": {
         "available": true,
         "downloadUrl": "/boarding-pass/VS006",
         "qrCode": "VS006QR"
       },
-
       "baggage": {
         "cabin": {
           "allowedWeight": "8kg",
@@ -452,7 +405,6 @@
           "pieces": 2
         }
       },
-
       "meal": {
         "selectedMeal": "Vegan Meal",
         "availableMeals": [
@@ -461,14 +413,12 @@
           "Vegan Meal"
         ]
       },
-
       "airport": {
         "securityWaitTimeMinutes": 20,
         "terminalMapAvailable": true,
         "loungeAccess": true,
         "priorityBoarding": true
       },
-
       "weather": {
         "departure": {
           "temperature": 31,
@@ -479,31 +429,26 @@
           "condition": "Cloudy"
         }
       },
-
       "seatSelection": {
         "available": true,
         "selectedSeat": "21A",
         "rows": []
       }
     },
-
     {
       "flightId": "FL-1005",
       "flightNumber": "AA921",
-
       "airline": {
         "name": "American Airlines",
         "code": "AA",
         "icao": "AAL"
       },
-
       "aircraft": {
         "model": "Boeing 737 MAX 8",
         "registration": "N921AA",
         "configuration": "3-3",
         "totalSeats": 172
       },
-
       "origin": {
         "airportName": "Miami International Airport",
         "iata": "MIA",
@@ -513,7 +458,6 @@
         "terminal": "N",
         "gate": "D46"
       },
-
       "destination": {
         "airportName": "Alfonso Bonilla Aragón International Airport",
         "iata": "CLO",
@@ -521,7 +465,6 @@
         "city": "Cali",
         "country": "Colombia"
       },
-
       "schedule": {
         "scheduledDeparture": "2026-07-27T18:15:00",
         "estimatedDeparture": "2026-07-27T18:15:00",
@@ -532,26 +475,22 @@
         "boardingTime": "2026-07-27T17:25:00",
         "boardingGateCloseTime": "2026-07-27T18:00:00"
       },
-
       "status": {
         "flightStatus": "On Time",
         "delayMinutes": 0,
         "delayReason": null
       },
-
       "checkIn": {
         "available": true,
         "status": "Not Checked In",
         "opensAt": "2026-07-26T18:15:00",
         "closesAt": "2026-07-27T17:15:00"
       },
-
       "boardingPass": {
         "available": false,
         "downloadUrl": null,
         "qrCode": null
       },
-
       "baggage": {
         "cabin": {
           "allowedWeight": "7kg",
@@ -562,7 +501,6 @@
           "pieces": 1
         }
       },
-
       "meal": {
         "selectedMeal": "Standard Meal",
         "availableMeals": [
@@ -571,14 +509,12 @@
           "Vegan Meal"
         ]
       },
-
       "airport": {
         "securityWaitTimeMinutes": 17,
         "terminalMapAvailable": true,
         "loungeAccess": false,
         "priorityBoarding": false
       },
-
       "weather": {
         "departure": {
           "temperature": 30,
@@ -589,7 +525,6 @@
           "condition": "Light Rain"
         }
       },
-
       "seatSelection": {
         "available": true,
         "selectedSeat": null,
@@ -597,4 +532,4 @@
       }
     }
   ]
-}
+};

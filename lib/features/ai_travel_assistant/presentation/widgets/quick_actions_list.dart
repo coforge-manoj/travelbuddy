@@ -12,6 +12,7 @@ class QuickAction {
 }
 
 const quickActions = <QuickAction>[
+  QuickAction(icon: Icons.flight_outlined, label: 'Available Flights', prompt: 'show me available flights'),
   QuickAction(icon: Icons.flight_outlined, label: 'Flight Status', prompt: 'Is my flight on time?'),
   QuickAction(
     icon: Icons.event_seat_outlined,

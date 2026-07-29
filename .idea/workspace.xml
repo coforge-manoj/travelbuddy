@@ -1,16 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="AutoImportSettings">
-    <option name="autoReloadType" value="SELECTIVE" />
+    <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
     <list default="true" id="48335f49-dfef-48d8-bd20-65d042ac283b" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/lib/core/enum/flight_input_type.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/summerized_input_result_model.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/chat_context_model.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/di/providers.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/di/providers.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/core/services/input_summerize_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/input_summerize_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/chat/presentation/pages/chat_page.dart" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/quick_actions_list.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/quick_actions_list.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/flight_assistant_chat/data/models/user_intent_result_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/user_intent_result_model.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/flight_assistant_chat/presentation/pages/ai_chat_page_dummy.dart" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/local_data/local_flight_data.json" beforeDir="false" afterPath="$PROJECT_DIR$/lib/local_data/local_flight_data.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/main.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pubspec.yaml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -48,21 +58,21 @@
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "chandanpradhan-netizen"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;chandanpradhan-netizen&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/coforge-manoj/travelbuddy.git",
-    "accountId": "94c383f1-4aa1-4230-9fef-946bc169d96d"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/coforge-manoj/travelbuddy.git&quot;,
+    &quot;accountId&quot;: &quot;94c383f1-4aa1-4230-9fef-946bc169d96d&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 1
-}]]></component>
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1
+}</component>
   <component name="ProjectId" id="3GtRzxD8cjvRfw4ZwDuULyxFH4g" />
   <component name="ProjectView">
     <navigator currentView="ProjectPane" proportions="" version="1" />
@@ -79,11 +89,22 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "Flutter.main.dart.executor": "Debug",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
     "dart.analysis.tool.window.visible": "false",
     "git-widget-placeholder": "integration/user__input__summary__ai",
-    "io.flutter.reload.alreadyRun": "true"
+    "io.flutter.reload.alreadyRun": "true",
+    "show.migrate.to.gradle.popup": "false"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\Chandan.Pradhan\Documents\travelbuddy\lib\features\ai_travel_assistant\data\models" />
+    </key>
+  </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="48335f49-dfef-48d8-bd20-65d042ac283b" name="Changes" comment="" />
@@ -99,5 +120,16 @@
     <layout>
       <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
     </layout>
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="Dart">
+          <url>file://$PROJECT_DIR$/lib/core/services/input_summerize_service.dart</url>
+          <line>262</line>
+          <option name="timeStamp" value="17" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

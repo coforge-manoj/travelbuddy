@@ -4,6 +4,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/cha
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart';
 
+import '../../../../core/services/input_summerize_service.dart';
+
 abstract interface class ChatRemoteDataSource {
   Future<IntentResult> classifyIntent(String userUtterance);
 
@@ -24,23 +26,28 @@ class OpenAiChatRemoteDataSource implements ChatRemoteDataSource {
 
   @override
   Future<IntentResult> classifyIntent(String userUtterance) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/chat/message',
-      data: {
-        'model': model,
-        'mode': 'intent_classification',
-        'input': userUtterance,
-      },
-    );
-    final data = response.data!;
-    return IntentResult(
-      type: IntentType.values.firstWhere(
-        (t) => t.name == data['intent'],
-        orElse: () => IntentType.unknown,
-      ),
-      confidence: (data['confidence'] as num?)?.toDouble() ?? 0.0,
-      entities: (data['entities'] as Map?)?.cast<String, String>() ?? const {},
-    );
+
+    final result =
+    await QueryUnderstandingService.instance
+        .summarizeInput(userUtterance);
+    return result;
+    // final response = await _dio.post<Map<String, dynamic>>(
+    //   '/chat/message',
+    //   data: {
+    //     'model': model,
+    //     'mode': 'intent_classification',
+    //     'input': userUtterance,
+    //   },
+    // );
+    // final data = response.data!;
+    // return IntentResult(
+    //   type: IntentType.values.firstWhere(
+    //     (t) => t.name == data['intent'],
+    //     orElse: () => IntentType.unknown,
+    //   ),
+    //   confidence: (data['confidence'] as num?)?.toDouble() ?? 0.0,
+    //   entities: (data['entities'] as Map?)?.cast<String, String>() ?? const {},
+    // );
   }
 
   @override

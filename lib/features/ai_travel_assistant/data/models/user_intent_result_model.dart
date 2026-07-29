@@ -1,23 +1,18 @@
 class UserIntentResult {
   final String cleanedText;
   final String intent;
-  final Map<String, dynamic> filters;
 
   const UserIntentResult({
     required this.cleanedText,
     required this.intent,
-    required this.filters,
   });
 
- factory UserIntentResult.fromJson(Map<String, dynamic> json) {
+ factory UserIntentResult.fromJson(json) {
   final filters = json['filters'];
 
   return UserIntentResult(
     cleanedText: json['cleanedText']?.toString() ?? '',
-    intent: json['intent']?.toString() ?? 'unknown',
-    filters: filters is Map
-        ? Map<String, dynamic>.from(filters)
-        : {},
+    intent: json['action']?.toString() ?? 'unknown',
   );
 }
 
@@ -25,7 +20,6 @@ class UserIntentResult {
     return {
       'cleanedText': cleanedText,
       'intent': intent,
-      'filters': filters,
     };
   }
 }

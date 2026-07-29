@@ -5,7 +5,9 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 
 /// Lists purchasable extra-baggage options; tapping "Add" confirms the
-/// purchase via [ChatViewModel.confirmBaggagePurchase].
+/// purchase via [ChatViewModel.confirmBaggagePurchase]. While the guided
+/// post-booking flow is active, also offers a way to skip straight to the
+/// final itinerary via [ChatViewModel.finishBooking].
 class BaggageOptionsCard extends ConsumerStatefulWidget {
   const BaggageOptionsCard({super.key, required this.options});
 
@@ -17,16 +19,28 @@ class BaggageOptionsCard extends ConsumerStatefulWidget {
 
 class _BaggageOptionsCardState extends ConsumerState<BaggageOptionsCard> {
   String? _purchasingOptionId;
+  bool _finishing = false;
+
+  bool get _isBusy => _purchasingOptionId != null || _finishing;
 
   Future<void> _purchase(String optionId) async {
-    if (_purchasingOptionId != null) return;
+    if (_isBusy) return;
     setState(() => _purchasingOptionId = optionId);
     await ref.read(chatViewModelProvider.notifier).confirmBaggagePurchase(optionId);
+  }
+
+  Future<void> _finish() async {
+    if (_isBusy) return;
+    setState(() => _finishing = true);
+    await ref.read(chatViewModelProvider.notifier).finishBooking();
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final showSkip = ref.watch(
+      chatViewModelProvider.select((state) => state.hasActiveBookingFlow),
+    );
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -72,8 +86,7 @@ class _BaggageOptionsCardState extends ConsumerState<BaggageOptionsCard> {
                     SizedBox(
                       width: 84,
                       child: OutlinedButton(
-                        onPressed:
-                            _purchasingOptionId == null ? () => _purchase(option.id) : null,
+                        onPressed: !_isBusy ? () => _purchase(option.id) : null,
                         child: _purchasingOptionId == option.id
                             ? const SizedBox(
                                 width: 14,
@@ -84,6 +97,20 @@ class _BaggageOptionsCardState extends ConsumerState<BaggageOptionsCard> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            if (showSkip)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: !_isBusy ? _finish : null,
+                  child: _finishing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Continue without extra baggage'),
                 ),
               ),
           ],

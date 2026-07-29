@@ -50,6 +50,61 @@ ISO-8601 strings; the nullable ones may be omitted.
 
 ---
 
+## `GET /flights/search`
+
+Backs `SearchFlightsUseCase`, called when the passenger's utterance
+classifies as the `bookFlight` intent (or they tap the "Book a Flight"
+quick action) — flight options are never shown until this is triggered.
+
+**Query params:** `origin` (string, required), `destination` (string, required)
+
+**Response 200:**
+```json
+[
+  {
+    "id": "UA482",
+    "airline": "United Airlines",
+    "flightNumber": "UA482",
+    "origin": "EWR",
+    "destination": "ORD",
+    "departureTime": "2026-07-23T06:45:00.000Z",
+    "arrivalTime": "2026-07-23T08:58:00.000Z",
+    "price": 189,
+    "currency": "USD",
+    "stops": 0
+  }
+]
+```
+
+---
+
+## `POST /booking`
+
+Backs `BookFlightUseCase`, called when the passenger taps "Select" on a
+`FlightOffersCard` entry. Returns the same shape as `GET /booking`.
+
+**Body:**
+```json
+{ "offerId": "UA482", "passengerName": "Joe Traveler" }
+```
+
+**Response 200:**
+```json
+{
+  "pnr": "TB123456",
+  "passengerName": "Joe Traveler",
+  "flight": { "...": "same shape as /flight/status" }
+}
+```
+
+**Error cases the client distinguishes:** a declined-payment response
+(non-2xx, or however the real backend signals it) should be surfaced as a
+failed request — the mock backend models this by returning `null`, which
+the repository maps to `PaymentFailure` (see `docs/CLASS_DIAGRAM.md`'s
+failure hierarchy).
+
+---
+
 ## `GET /seatmap`
 
 **Query params:** `flightNumber` (string, required)
@@ -174,7 +229,12 @@ changing.
 { "intent": "seatSelection", "confidence": 0.92, "entities": {} }
 ```
 `intent` must be one of the `IntentType` enum names (see
-`docs/CLASS_DIAGRAM.md`); anything else maps to `unknown` client-side.
+`docs/CLASS_DIAGRAM.md`), including `bookFlight` — the mock backend
+classifies anything containing "book" (or "search flight"/"find a
+flight"/"new flight") as `bookFlight` *before* checking for the generic
+"flight" keyword used by `flightStatus`, so "book a flight" doesn't get
+misread as a status request. Anything unmatched maps to `unknown`
+client-side.
 
 **`mode: "reply"`**
 ```json

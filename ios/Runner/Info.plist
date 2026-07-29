@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TravelBuddy needs microphone access so you can talk to the AI travel assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>TravelBuddy uses speech recognition to turn what you say into chat messages for the AI travel assistant.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

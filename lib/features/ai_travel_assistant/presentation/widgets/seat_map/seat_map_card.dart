@@ -20,6 +20,7 @@ class SeatMapCard extends ConsumerStatefulWidget {
 class _SeatMapCardState extends ConsumerState<SeatMapCard> {
   String? _selectedSeatNumber;
   bool _confirmed = false;
+  bool _skipping = false;
 
   Map<int, List<Seat>> get _seatsByRow {
     final grouped = <int, List<Seat>>{};
@@ -43,9 +44,15 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
 
   Future<void> _confirm() async {
     final seatNumber = _selectedSeatNumber;
-    if (seatNumber == null || _confirmed) return;
+    if (seatNumber == null || _confirmed || _skipping) return;
     setState(() => _confirmed = true);
     await ref.read(chatViewModelProvider.notifier).confirmSeatChange(seatNumber);
+  }
+
+  Future<void> _skip() async {
+    if (_confirmed || _skipping) return;
+    setState(() => _skipping = true);
+    await ref.read(chatViewModelProvider.notifier).skipSeatSelection();
   }
 
   @override
@@ -53,6 +60,9 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
     final rows = _seatsByRow.keys.toList()..sort();
     final scheme = Theme.of(context).colorScheme;
     final selectedSeat = _selectedSeat;
+    final showSkip = ref.watch(
+      chatViewModelProvider.select((state) => state.hasActiveBookingFlow),
+    );
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -110,18 +120,31 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
                 'Confirming seat $_selectedSeatNumber…',
                 style: Theme.of(context).textTheme.bodySmall,
               )
+            else if (_skipping)
+              Text(
+                'Skipping seat selection…',
+                style: Theme.of(context).textTheme.bodySmall,
+              )
             else
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: selectedSeat != null && selectedSeat.isAvailable ? _confirm : null,
-                  child: Text(
-                    selectedSeat == null
-                        ? 'Select a seat'
-                        : 'Confirm ${selectedSeat.seatNumber}'
-                            '${selectedSeat.priceDelta > 0 ? ' (+${selectedSeat.priceDelta.toStringAsFixed(0)} ${widget.seatMap.currency})' : ''}',
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (showSkip)
+                    TextButton(
+                      onPressed: _skip,
+                      child: const Text('Skip'),
+                    ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: selectedSeat != null && selectedSeat.isAvailable ? _confirm : null,
+                    child: Text(
+                      selectedSeat == null
+                          ? 'Select a seat'
+                          : 'Confirm ${selectedSeat.seatNumber}'
+                              '${selectedSeat.priceDelta > 0 ? ' (+${selectedSeat.priceDelta.toStringAsFixed(0)} ${widget.seatMap.currency})' : ''}',
+                    ),
                   ),
-                ),
+                ],
               ),
           ],
         ),

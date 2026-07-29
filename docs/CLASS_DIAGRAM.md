@@ -21,6 +21,8 @@ classDiagram
         <<enum>>
         text
         flightStatusCard
+        flightOffersCard
+        bookingConfirmationCard
         seatMapCard
         baggageOptionsCard
         baggageSuccessCard
@@ -39,6 +41,7 @@ classDiagram
     }
     class IntentType {
         <<enum>>
+        bookFlight
         flightStatus
         seatSelection
         addBaggage
@@ -83,6 +86,28 @@ classDiagram
         +Flight flight
     }
     Booking --> Flight
+
+    class FlightOffer {
+        +String id
+        +String airline
+        +String flightNumber
+        +String origin
+        +String destination
+        +DateTime departureTime
+        +DateTime arrivalTime
+        +num price
+        +String currency
+        +int stops
+        +bool isNonstop
+        +Duration duration
+    }
+
+    class BookingSummary {
+        +Booking booking
+        +String? seatNumber
+        +num extraBaggageKg
+    }
+    BookingSummary --> Booking
 
     class Seat {
         +String seatNumber

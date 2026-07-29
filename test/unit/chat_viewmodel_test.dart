@@ -5,6 +5,7 @@ import 'package:ai_travel_assistant/core/errors/failures.dart';
 import 'package:ai_travel_assistant/core/utils/result.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
@@ -121,7 +122,7 @@ void main() {
     verify(() => historyRepository.clearHistory()).called(1);
   });
 
-  test('selecting a flight offer books it and renders a confirmation card', () async {
+  test('selecting a flight offer books it and starts the guided seat/baggage flow', () async {
     final booking = Booking(
       pnr: 'TB123456',
       passengerName: 'Joe Traveler',
@@ -139,13 +140,114 @@ void main() {
         passengerName: any(named: 'passengerName'),
       ),
     ).thenAnswer((_) async => Result.success(booking));
+    const seatMap = SeatMap(flightNumber: 'UA482', rows: 1, seats: []);
+    when(() => seatRepository.getSeatMap(any()))
+        .thenAnswer((_) async => const Result.success(seatMap));
 
     await viewModel.selectFlightOffer('UA482');
     await pumpEventQueue();
 
-    expect(viewModel.state.messages.last.type, ChatMessageType.bookingConfirmationCard);
-    expect(viewModel.state.messages.last.payload, booking);
+    expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
+    expect(viewModel.state.messages.last.payload, seatMap);
+    expect(viewModel.state.pendingBooking, booking);
   });
+
+  test(
+    'the guided flow ends with a complete itinerary card including terminal info',
+    () async {
+      final flight = Flight(
+        flightNumber: 'UA482',
+        origin: 'EWR',
+        destination: 'ORD',
+        status: FlightStatus.scheduled,
+        scheduledDeparture: DateTime(2026, 1, 2, 6, 45),
+        gate: 'B12',
+        terminal: '2',
+        checkInCounter: '14-18',
+        boardingTime: DateTime(2026, 1, 2, 6, 5),
+      );
+      final booking = Booking(pnr: 'TB123456', passengerName: 'Joe Traveler', flight: flight);
+      when(
+        () => flightRepository.bookFlight(
+          offerId: any(named: 'offerId'),
+          passengerName: any(named: 'passengerName'),
+        ),
+      ).thenAnswer((_) async => Result.success(booking));
+      const seatMap = SeatMap(
+        flightNumber: 'UA482',
+        rows: 1,
+        seats: [
+          Seat(
+            seatNumber: '14A',
+            row: 14,
+            column: 'A',
+            type: SeatType.window,
+            availability: SeatAvailability.available,
+            priceDelta: 15,
+          ),
+        ],
+      );
+      when(() => seatRepository.getSeatMap(any()))
+          .thenAnswer((_) async => const Result.success(seatMap));
+      const seat = Seat(
+        seatNumber: '14A',
+        row: 14,
+        column: 'A',
+        type: SeatType.window,
+        availability: SeatAvailability.selected,
+        priceDelta: 15,
+      );
+      when(
+        () => seatRepository.changeSeat(
+          pnr: any(named: 'pnr'),
+          flightNumber: any(named: 'flightNumber'),
+          seatNumber: any(named: 'seatNumber'),
+        ),
+      ).thenAnswer((_) async => const Result.success(seat));
+      const options = [BaggageOption(id: 'bag_10kg', extraWeightKg: 10, price: 45)];
+      when(() => baggageRepository.getBaggageOptions(any()))
+          .thenAnswer((_) async => const Result.success(options));
+      const purchase = BaggagePurchase(
+        id: 'purchase_1',
+        option: BaggageOption(id: 'bag_10kg', extraWeightKg: 10, price: 45),
+        status: BaggagePurchaseStatus.success,
+        confirmationCode: 'BG12345',
+      );
+      when(
+        () => baggageRepository.purchaseBaggage(
+          pnr: any(named: 'pnr'),
+          optionId: any(named: 'optionId'),
+        ),
+      ).thenAnswer((_) async => const Result.success(purchase));
+
+      await viewModel.selectFlightOffer('UA482');
+      await pumpEventQueue();
+      expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
+
+      await viewModel.confirmSeatChange('14A');
+      await pumpEventQueue();
+      expect(viewModel.state.messages.last.type, ChatMessageType.baggageOptionsCard);
+      expect(viewModel.state.pendingSeatNumber, '14A');
+
+      await viewModel.confirmBaggagePurchase('bag_10kg');
+      await pumpEventQueue();
+      expect(viewModel.state.messages.last.type, ChatMessageType.baggageSuccessCard);
+      expect(viewModel.state.pendingBaggagePurchases, [purchase]);
+
+      await viewModel.finishBooking();
+      await pumpEventQueue();
+
+      final finalMessage = viewModel.state.messages.last;
+      expect(finalMessage.type, ChatMessageType.bookingConfirmationCard);
+      final summary = finalMessage.payload! as BookingSummary;
+      expect(summary.booking, booking);
+      expect(summary.seatNumber, '14A');
+      expect(summary.extraBaggageKg, 10);
+      expect(summary.booking.flight.terminal, '2');
+      expect(summary.booking.flight.gate, 'B12');
+      expect(viewModel.state.pendingBooking, isNull);
+    },
+  );
 
   test('seat-selection intent renders a seat map card', () async {
     when(() => chatRepository.classifyIntent(any())).thenAnswer(

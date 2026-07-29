@@ -123,6 +123,7 @@ class MockBackendServer {
         .expand((offers) => offers)
         .firstWhere((o) => o.id == offerId, orElse: () => searchFlights(origin: 'EWR', destination: 'ORD').first);
 
+    final departureTime = DateTime.parse(offer.departureTime);
     final booking = BookingModel(
       pnr: 'TB${_random.nextInt(900000) + 100000}',
       passengerName: passengerName,
@@ -132,6 +133,10 @@ class MockBackendServer {
         destination: offer.destination,
         status: 'scheduled',
         scheduledDeparture: offer.departureTime,
+        gate: 'B${12 + _random.nextInt(8)}',
+        terminal: '${1 + _random.nextInt(3)}',
+        checkInCounter: '${10 + _random.nextInt(20)}-${20 + _random.nextInt(5)}',
+        boardingTime: departureTime.subtract(const Duration(minutes: 40)).toIso8601String(),
       ),
     );
     bookingHistory.add(booking);
@@ -243,6 +248,12 @@ class MockBackendServer {
   // ---------------------------------------------------------------------
   IntentResult classifyIntent(String utterance) {
     final lower = utterance.toLowerCase();
+    if (lower.contains('book') ||
+        lower.contains('search flight') ||
+        lower.contains('find a flight') ||
+        lower.contains('new flight')) {
+      return const IntentResult(type: IntentType.bookFlight, confidence: 0.93);
+    }
     if (lower.contains('seat')) {
       return const IntentResult(type: IntentType.seatSelection, confidence: 0.92);
     }

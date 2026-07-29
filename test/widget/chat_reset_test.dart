@@ -74,14 +74,17 @@ void main() {
     expect(find.byType(ChatPage), findsOneWidget);
     expect(find.textContaining('Hello Joe'), findsOneWidget);
     expect(find.text('Flight options'), findsOneWidget);
-    expect(find.text("You're booked!"), findsNothing);
+    expect(find.text('Choose a seat'), findsNothing);
 
-    // Mutate the session by booking the first suggested flight.
+    // Mutate the session by booking the first suggested flight — this now
+    // starts the guided seat-selection step rather than confirming outright,
+    // chaining a book-flight call into a seat-map fetch.
     await tester.ensureVisible(find.text('Select').first);
     await tester.pump();
     await tester.tap(find.text('Select').first, warnIfMissed: false);
     await settle(tester);
-    expect(find.text("You're booked!"), findsOneWidget);
+    await settle(tester);
+    expect(find.text('Choose a seat'), findsOneWidget);
 
     // Navigate back to the host app, then re-open the assistant.
     await tester.tap(find.byIcon(Icons.arrow_back));
@@ -90,8 +93,8 @@ void main() {
 
     await openChat();
 
-    // Fresh session: no leftover booking, just the welcome + offers again.
-    expect(find.text("You're booked!"), findsNothing);
+    // Fresh session: no leftover booking flow, just the welcome + offers again.
+    expect(find.text('Choose a seat'), findsNothing);
     expect(find.textContaining('Hello Joe'), findsOneWidget);
     expect(find.text('Flight options'), findsOneWidget);
   });

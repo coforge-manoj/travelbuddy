@@ -25,7 +25,8 @@ class OpenAiChatRemoteDataSource implements ChatRemoteDataSource {
 
   @override
   Future<IntentResult> classifyIntent(String userUtterance) async {
-    return await QueryUnderstandingService.instance.summarizeInput(userUtterance);
+    IntentResult result= await QueryUnderstandingService.instance.summarizeInput(userUtterance);
+    return result;
   }
 
   @override

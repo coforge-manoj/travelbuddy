@@ -252,24 +252,24 @@ class MockBackendServer {
         lower.contains('search flight') ||
         lower.contains('find a flight') ||
         lower.contains('new flight')) {
-      return const IntentResult(type: IntentType.bookFlight, confidence: 0.93);
+      return  IntentResult(type: IntentType.bookFlight, confidence: 0.93, originalMessage: utterance);
     }
     if (lower.contains('seat')) {
-      return const IntentResult(type: IntentType.seatSelection, confidence: 0.92);
+      return IntentResult(type: IntentType.seatSelection, confidence: 0.92,originalMessage: utterance);
     }
     if (lower.contains('baggage') || lower.contains('bag') || lower.contains('kg')) {
-      return const IntentResult(type: IntentType.addBaggage, confidence: 0.88);
+      return  IntentResult(type: IntentType.addBaggage, confidence: 0.88,originalMessage: utterance);
     }
     if (lower.contains('delay') || lower.contains('status') || lower.contains('flight')) {
-      return const IntentResult(type: IntentType.flightStatus, confidence: 0.9);
+      return IntentResult(type: IntentType.flightStatus, confidence: 0.9,originalMessage: utterance);
     }
     if (lower.contains('terminal') || lower.contains('counter') || lower.contains('gate')) {
-      return const IntentResult(type: IntentType.terminalInformation, confidence: 0.85);
+      return IntentResult(type: IntentType.terminalInformation, confidence: 0.85,originalMessage: utterance);
     }
     if (lower.contains('agent') || lower.contains('human') || lower.contains('help me')) {
-      return const IntentResult(type: IntentType.humanAgent, confidence: 0.8);
+      return IntentResult(type: IntentType.humanAgent, confidence: 0.8,originalMessage: utterance);
     }
-    return const IntentResult(type: IntentType.faq, confidence: 0.4);
+    return IntentResult(type: IntentType.faq, confidence: 0.4,originalMessage: utterance);
   }
 
   String generateReplyText(String utterance) {

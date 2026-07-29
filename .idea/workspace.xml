@@ -4,7 +4,15 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="48335f49-dfef-48d8-bd20-65d042ac283b" name="Changes" comment="" />
+    <list default="true" id="48335f49-dfef-48d8-bd20-65d042ac283b" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/android/app/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/build.gradle.kts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/android/app/src/main/kotlin/com/example/ai_travel_assistant/MainActivity.kt" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/kotlin/com/example/ai_travel_assistant/MainActivity.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/query_understand_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/query_understand_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -111,6 +119,36 @@
           <url>file://$PROJECT_DIR$/lib/core/services/input_summerize_service.dart</url>
           <line>262</line>
           <option name="timeStamp" value="17" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="Dart">
+          <url>file://$PROJECT_DIR$/lib/core/services/query_understand_service.dart</url>
+          <line>18</line>
+          <option name="timeStamp" value="21" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="Dart">
+          <url>file://$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart</url>
+          <line>224</line>
+          <option name="timeStamp" value="25" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="Dart">
+          <url>file://$PROJECT_DIR$/lib/core/services/query_understand_service.dart</url>
+          <line>265</line>
+          <option name="timeStamp" value="28" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="Dart">
+          <url>file://$PROJECT_DIR$/lib/core/services/query_understand_service.dart</url>
+          <line>263</line>
+          <option name="timeStamp" value="29" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="Dart">
+          <url>file://$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart</url>
+          <line>63</line>
+          <option name="timeStamp" value="30" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="Dart">
+          <url>file://$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart</url>
+          <line>32</line>
+          <option name="timeStamp" value="31" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

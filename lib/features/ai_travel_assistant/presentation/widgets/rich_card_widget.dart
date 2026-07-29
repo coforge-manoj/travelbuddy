@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/airport_info.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
@@ -35,7 +35,7 @@ class RichCardWidget extends ConsumerWidget {
       ChatMessageType.flightOffersCard =>
         FlightOffersCard(offers: message.payload! as List<FlightOffer>),
       ChatMessageType.bookingConfirmationCard =>
-        BookingConfirmationCard(booking: message.payload! as Booking),
+        BookingConfirmationCard(summary: message.payload! as BookingSummary),
       ChatMessageType.seatMapCard => SeatMapCard(seatMap: message.payload! as SeatMap),
       ChatMessageType.baggageOptionsCard =>
         BaggageOptionsCard(options: message.payload! as List<BaggageOption>),

@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
@@ -272,7 +271,7 @@ Output:
   IntentType _parseIntent(String? value) {
     switch (value) {
       case 'searchFlights':
-        return IntentType.searchFlights;
+        return IntentType.searchFlight;
 
       case 'flightStatus':
         return IntentType.flightStatus;

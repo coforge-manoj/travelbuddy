@@ -1,7 +1,8 @@
 import 'package:equatable/equatable.dart';
 
 enum IntentType {
-  searchFlights,
+  searchFlight,
+  bookFlight,
   flightStatus,
   seatSelection,
   addBaggage,
@@ -39,60 +40,4 @@ class IntentResult extends Equatable {
 
   @override
   List<Object?> get props => [type, confidence, entities];
-
-  factory IntentResult.fromJson(Map<String, dynamic> json) {
-    return IntentResult(
-      type: _parseIntent(
-        json['action']?.toString(),
-      ),
-      confidence:
-      (json['confidence'] as num?)?.toDouble() ?? 0.0,
-      entities:
-      (json['entities'] as Map?)
-          ?.map(
-            (key, value) => MapEntry(
-          key.toString(),
-          value.toString(),
-        ),
-      ) ??
-          const {},
-    );
-  }
-
-  static IntentType _parseIntent(String? value) {
-    switch (value) {
-      case 'flightStatus':
-        return IntentType.flightStatus;
-
-      case 'seatSelection':
-        return IntentType.seatSelection;
-
-      case 'addBaggage':
-        return IntentType.addBaggage;
-
-      case 'terminalInformation':
-        return IntentType.terminalInformation;
-
-      case 'counterInformation':
-        return IntentType.counterInformation;
-
-      case 'boardingTime':
-        return IntentType.boardingTime;
-
-      case 'airportNavigation':
-        return IntentType.airportNavigation;
-
-      case 'baggageAllowance':
-        return IntentType.baggageAllowance;
-
-      case 'humanAgent':
-        return IntentType.humanAgent;
-
-      case 'faq':
-        return IntentType.faq;
-
-      default:
-        return IntentType.unknown;
-    }
-  }
 }

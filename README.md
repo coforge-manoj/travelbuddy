@@ -1,9 +1,10 @@
 # AI Travel Assistant — Flutter Feature Module
 
 A self-contained, plug-in AI Travel Assistant for airline mobile apps. Passengers
-interact via text or voice inside a single chat surface to check flight status,
-change seats, buy baggage, get terminal/gate/boarding info, navigate the airport,
-or escalate to a human agent — all without leaving the conversation.
+interact via text or voice inside a single chat surface to book a flight, check
+flight status, change seats, buy baggage, get terminal/gate/boarding info,
+navigate the airport, or escalate to a human agent — all without leaving the
+conversation.
 
 ## Architecture
 
@@ -32,13 +33,13 @@ lib/
       presentation/
         pages/chat_page.dart
         widgets/
-          chat_bubble.dart, typing_indicator.dart, suggested_prompts.dart,
+          chat_bubble.dart, typing_indicator.dart, quick_actions_list.dart,
           message_composer.dart, markdown_message.dart, rich_card_widget.dart
-          seat_map/               # SeatMapCard, SeatTile
+          seat_map/               # SeatMapCard (with a "Skip" action), SeatTile
           baggage/                # BaggageOptionsCard, BaggageSuccessCard
-          flight/                 # FlightStatusCard
+          flight/                 # FlightOffersCard, FlightStatusCard, BookingConfirmationCard
           airport/                # AirportInfoCard
-        viewmodels/               # ChatState, ChatViewModel
+        viewmodels/               # ChatState, ChatViewModel, BookingSessionStore
       domain/
         entities/                # ChatMessage, Flight, Seat, BaggageOption, Intent...
         repositories/             # abstract interfaces
@@ -99,14 +100,24 @@ dart run build_runner build --delete-conflicting-outputs   # generates *.freezed
 flutter run -t lib/main.dart
 ```
 
-Try: *"Is my flight delayed?"* → interactive `FlightStatusCard`. *"I want a
-window seat"* → tap a seat on `SeatMapCard`, confirm, get a real
-seat-change confirmation. *"I need another 10kg of baggage"* → tap **Add**
-on `BaggageOptionsCard`, get a `BaggageSuccessCard` with a confirmation
-code. *"Which terminal do I go to?"* → `AirportInfoCard` with walking
-directions. Tap the mic to speak instead of typing; assistant text replies
-are read back via TTS (toggle with `ChatViewModel.toggleVoiceOutput()`).
-Chat history persists across restarts via Hive.
+Flight options are never shown proactively — only once you ask to book one.
+Try: *"I want to book a flight"* (or tap the **Book a Flight** quick action)
+→ `FlightOffersCard` → tap **Select** on one → `SeatMapCard` (tap a seat and
+**Confirm**, or tap **Skip**) → `BaggageOptionsCard` (add a bag, or
+**Continue without extra baggage**) → `BookingConfirmationCard` with the
+full itinerary. That booking is then remembered across sessions — close and
+reopen the chat and asking *"I want a window seat"* or *"I need another
+10kg of baggage"* resolves to the flight you just booked instead of demo
+data. Ask for a seat, baggage, status, or airport info *before* booking
+anything (fresh install, or after a hot restart clears
+`BookingSessionStore`), and the assistant tells you no flight is booked yet
+and offers the same `FlightOffersCard` to start one.
+
+Also try: *"Is my flight delayed?"* → interactive `FlightStatusCard`.
+*"Which terminal do I go to?"* → `AirportInfoCard` with walking directions.
+Tap the mic to speak instead of typing; assistant text replies are read
+back via TTS (toggle with `ChatViewModel.toggleVoiceOutput()`). Chat
+history persists across restarts via Hive.
 
 To see the error-handling paths, flip a flag on
 `MockBackendServer.instance` (see `docs/SETUP_GUIDE.md` §5) — e.g.
@@ -116,8 +127,10 @@ To see the error-handling paths, flip a flag on
 ### Documentation
 
 - `docs/ARCHITECTURE.md` — layer responsibilities + component diagram
-- `docs/SEQUENCE_DIAGRAMS.md` — seat selection, baggage purchase (with a
-  simulated payment failure), and low-confidence escalation flows
+- `docs/SEQUENCE_DIAGRAMS.md` — booking a flight (skipping seat & baggage),
+  the no-active-booking fallback, seat selection for a returning passenger,
+  baggage purchase (with a simulated payment failure), and low-confidence
+  escalation flows
 - `docs/CLASS_DIAGRAM.md` — domain entity relationships + failure hierarchy
 - `docs/API_CONTRACTS.md` — exact request/response JSON for every endpoint,
   so a real backend team can implement against it directly

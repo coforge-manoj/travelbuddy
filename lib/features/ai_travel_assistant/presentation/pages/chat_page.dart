@@ -54,10 +54,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
 
     final isTyping = state.status == ChatStatus.sendingMessage;
-    // Show the onboarding shortcuts once the welcome message and the initial
-    // flight-offer suggestion have landed, until the passenger acts on
-    // either of them.
-    final showQuickActions = state.messages.length <= 2 && state.status == ChatStatus.idle;
+    // Show the onboarding shortcuts once the welcome message has landed,
+    // until the passenger sends their first message.
+    final showQuickActions = state.messages.length <= 1 && state.status == ChatStatus.idle;
     final itemCount = state.messages.length + (isTyping ? 1 : 0) + (showQuickActions ? 1 : 0);
 
     return Scaffold(

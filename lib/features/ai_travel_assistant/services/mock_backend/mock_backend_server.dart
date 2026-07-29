@@ -248,6 +248,12 @@ class MockBackendServer {
   // ---------------------------------------------------------------------
   IntentResult classifyIntent(String utterance) {
     final lower = utterance.toLowerCase();
+    if (lower.contains('book') ||
+        lower.contains('search flight') ||
+        lower.contains('find a flight') ||
+        lower.contains('new flight')) {
+      return const IntentResult(type: IntentType.bookFlight, confidence: 0.93);
+    }
     if (lower.contains('seat')) {
       return const IntentResult(type: IntentType.seatSelection, confidence: 0.92);
     }

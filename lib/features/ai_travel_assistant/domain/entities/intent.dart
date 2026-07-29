@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 enum IntentType {
+  bookFlight,
   flightStatus,
   seatSelection,
   addBaggage,

@@ -17,9 +17,10 @@ class QueryUnderstandingService {
   Future<IntentResult> summarizeInput(String input) async {
     try {
       if (input.trim().isEmpty) {
-        return const IntentResult(
+        return  IntentResult(
           type: IntentType.unknown,
           confidence: 0.0,
+          originalMessage: input
         );
       }
 
@@ -242,6 +243,7 @@ Output:
       jsonDecode(cleanedContent) as Map<String, dynamic>;
 
       return IntentResult(
+          originalMessage: input,
         type: _parseIntent(
           result['action']?.toString(),
         ),
@@ -261,9 +263,10 @@ Output:
     } catch (e) {
       print('QueryUnderstandingService Error: $e');
 
-      return const IntentResult(
+      return  IntentResult(
         type: IntentType.unknown,
         confidence: 0.0,
+          originalMessage: input
       );
     }
   }

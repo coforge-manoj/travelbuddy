@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -14,6 +15,7 @@ import 'package:ai_travel_assistant/features/landing/presentation/pages/landing_
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+  await dotenv.load(fileName: ".env");
   final chatHistoryBox = await Hive.openBox<Map<dynamic, dynamic>>(
     HiveChatLocalDataSource.boxName,
   );

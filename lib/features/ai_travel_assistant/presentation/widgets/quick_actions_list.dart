@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:ai_travel_assistant/core/theme/app_theme.dart';
+
 /// One tappable shortcut in the [QuickActionsList] — an icon/label shown to
 /// the passenger, and the utterance sent through the normal chat pipeline
 /// when tapped.
@@ -84,8 +86,6 @@ class _QuickActionPill extends StatelessWidget {
   final QuickAction action;
   final VoidCallback onTap;
 
-  static const _brandBlue = Color(0xFF0883F9);
-
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -108,13 +108,13 @@ class _QuickActionPill extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(action.icon, size: 20, color: _brandBlue),
+              Icon(action.icon, size: 20, color: AppTheme.brandBlue),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   action.label,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: _brandBlue,
+                        color: AppTheme.brandBlue,
                         fontWeight: FontWeight.w500,
                       ),
                 ),

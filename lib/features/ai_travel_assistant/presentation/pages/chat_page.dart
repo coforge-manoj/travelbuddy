@@ -10,6 +10,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/wi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/quick_actions_list.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/rich_card_widget.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/typing_indicator.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/voice/speaking_indicator.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/voice/voice_status_bar.dart';
 
 /// The single entry-point screen for the AI Travel Assistant. Push this from
 /// the host app — e.g.
@@ -22,13 +24,37 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> {
+class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver {
   final _scrollController = ScrollController();
+
+  /// When talkback is on, the passenger can temporarily prefer the text
+  /// composer. Not persisted — entering talkback always lands on the orb.
+  bool _preferTypingWhileTalkback = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Sync the app-scoped narrator with the current lifecycle — a previous
+    // visit may have left speech blocked after a background.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final lifecycle =
+          WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+      ref.read(chatViewModelProvider.notifier).handleAppLifecycle(lifecycle);
+    });
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(chatViewModelProvider.notifier).handleAppLifecycle(state);
   }
 
   void _scrollToBottom() {
@@ -40,6 +66,34 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  /// The orb means one thing only: start or stop *listening*. Tapping it while
+  /// the assistant talks is a barge-in — [ChatViewModel.startVoiceInput] stops
+  /// narration on its way in. Silencing without speaking is the dedicated stop
+  /// button's job.
+  void _toggleMic(ChatViewModel viewModel, ChatState state) {
+    if (state.status == ChatStatus.listening) {
+      viewModel.stopVoiceInput();
+    } else {
+      viewModel.startVoiceInput();
+    }
+  }
+
+  void _toggleComposerMic(ChatViewModel viewModel, ChatState state) {
+    if (state.status == ChatStatus.listening) {
+      viewModel.stopVoiceInput();
+    } else {
+      viewModel.startVoiceInput(mode: VoiceInputMode.dictate);
+    }
+  }
+
+  Future<void> _onTalkbackToggle(ChatViewModel viewModel, bool currentlyEnabled) async {
+    if (!currentlyEnabled) {
+      // Entering talkback always shows the orb first.
+      setState(() => _preferTypingWhileTalkback = false);
+    }
+    await viewModel.toggleVoiceOutput();
   }
 
   @override
@@ -59,10 +113,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final showQuickActions = state.messages.length <= 1 && state.status == ChatStatus.idle;
     final itemCount = state.messages.length + (isTyping ? 1 : 0) + (showQuickActions ? 1 : 0);
 
+    final showVoiceBar = state.isVoiceOutputEnabled && !_preferTypingWhileTalkback;
+    // Chip only when the orb is hidden (talkback off, or temporary typing).
+    final showSpeakingChip = state.isSpeaking && !showVoiceBar;
+
     return Scaffold(
       body: Column(
         children: [
-          ChatHeader(onBack: () => Navigator.of(context).maybePop()),
+          ChatHeader(
+            onBack: () => Navigator.of(context).maybePop(),
+            isTalkbackEnabled: state.isVoiceOutputEnabled,
+            onTalkbackToggle: () => _onTalkbackToggle(viewModel, state.isVoiceOutputEnabled),
+          ),
           Expanded(
             child: state.messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -86,18 +148,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     },
                   ),
           ),
-          MessageComposer(
-            enabled: !state.isBusy,
-            isListening: state.status == ChatStatus.listening,
-            onSend: viewModel.sendMessage,
-            onMicPressed: () {
-              if (state.status == ChatStatus.listening) {
-                viewModel.stopVoiceInput();
-              } else {
-                viewModel.startVoiceInput();
-              }
-            },
-          ),
+          if (showSpeakingChip) SpeakingIndicator(onStop: viewModel.stopSpeaking),
+          if (showVoiceBar)
+            VoiceStatusBar(
+              status: state.status,
+              enabled: !state.isBusy || state.status == ChatStatus.speaking,
+              onOrbTap: () => _toggleMic(viewModel, state),
+              onStopSpeaking: viewModel.stopSpeaking,
+              onPreferTyping: () => setState(() => _preferTypingWhileTalkback = true),
+            )
+          else
+            MessageComposer(
+              enabled: !state.isBusy,
+              isListening: state.status == ChatStatus.listening,
+              showReturnToVoice: state.isVoiceOutputEnabled,
+              dictationText: state.dictationDraft,
+              dictationRevision: state.dictationRevision,
+              onReturnToVoice: () {
+                setState(() => _preferTypingWhileTalkback = false);
+                if (state.status != ChatStatus.listening &&
+                    state.status != ChatStatus.speaking) {
+                  viewModel.startVoiceInput();
+                }
+              },
+              onSend: viewModel.sendMessage,
+              onMicPressed: () => _toggleComposerMic(viewModel, state),
+            ),
         ],
       ),
     );

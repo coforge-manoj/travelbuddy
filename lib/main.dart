@@ -15,7 +15,9 @@ import 'package:ai_travel_assistant/features/landing/presentation/pages/landing_
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
-  await dotenv.load(fileName: ".env");
+  // Must be listed under `flutter.assets` in pubspec.yaml. isOptional keeps
+  // the app from hanging on the native splash if the asset is missing.
+  await dotenv.load(fileName: '.env', isOptional: true);
   final chatHistoryBox = await Hive.openBox<Map<dynamic, dynamic>>(
     HiveChatLocalDataSource.boxName,
   );

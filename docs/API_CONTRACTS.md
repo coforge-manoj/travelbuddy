@@ -260,6 +260,41 @@ client-side.
 { "queuePosition": 2, "estimatedWaitMinutes": 4 }
 ```
 
+**`mode: "voice_phrasing"`** — words one spoken turn.
+```json
+// request
+{
+  "model": "gpt-4.1-mini",
+  "mode": "voice_phrasing",
+  "instructions": "You are the voice of an airline travel assistant...",
+  "topic": "flightOffers",
+  "tone": "neutral",
+  "invitation": "chooseOffer",
+  "facts": [
+    "there are 2 flights from Newark to Chicago",
+    "the lowest fare is Delta Air Lines at 176 dollars, departing 12 30 in the afternoon"
+  ],
+  "must_include": ["Delta Air Lines", "176 dollars"],
+  "recent_utterances": ["Flight U A 4 8 2 is reserved."]
+}
+// response
+{ "text": "Good news — there are 2 flights to Chicago, and the lowest fare is Delta Air Lines at 176 dollars. Shall I book that one?" }
+```
+
+This is spoken aloud, not displayed. The model chooses only the wording: it
+must convey every entry in `facts`, reproduce every `must_include` fragment
+verbatim, and introduce no number that isn't already in the request. `facts`
+arrive pre-formatted for speech (airport codes expanded, prices and codes
+spelled out for the engine) and must be passed through as written. `tone` and
+`invitation` are the enum names of `SpokenTone`/`SpokenInvitation`;
+`recent_utterances` is the tail of what the passenger has already heard, for
+avoiding repeated openers.
+
+The client verifies the response (`SpokenFactGuard`) and silently falls back to
+its own deterministic summary if the facts were altered, if more than one
+question was asked, if the answer is too long, or if the call doesn't return
+within ~1.2s — so this endpoint may fail closed without breaking voice output.
+
 ---
 
 ## Error handling contract

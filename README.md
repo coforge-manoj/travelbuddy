@@ -119,6 +119,36 @@ Tap the mic to speak instead of typing; assistant text replies are read
 back via TTS (toggle with `ChatViewModel.toggleVoiceOutput()`). Chat
 history persists across restarts via Hive.
 
+### Spoken copy comes from the model, the facts do not
+
+Rich cards are summarised for speech rather than read out, and the wording of
+each spoken turn is chosen at runtime instead of being a fixed string, so the
+same seat map or offers list doesn't come back word-for-word identical every
+session:
+
+1. `VoiceSummaryBuilder` turns a card into a `SpokenDraft` — the facts as
+   short clauses, the tone, what to invite next, and one deterministic
+   fallback phrasing.
+2. `VoiceNarrator` hands the draft to `SpeechPhraser` just before speaking it,
+   and keeps spoken order intact while phrasing resolves.
+3. `LlmSpeechPhraser` asks the phrasing model (via
+   `VoicePhrasingRepository`), then `SpokenFactGuard` checks the answer:
+   prices, confirmation codes, gates and times must survive verbatim, no
+   number may appear that wasn't in the draft, and it must stay short. Failing
+   any of that — or the model being slow or unreachable — falls back to the
+   draft's deterministic text, so voice output degrades to plain, never to
+   silence or to a wrong fare.
+
+Out of the box this runs against `MockVoicePhrasingRemoteDataSource`, which
+recomposes the draft's facts with rotating frames and closings so the variety
+is audible in the demo. Point it at a real provider by overriding
+`useMockBackendProvider` with `false` (see `docs/SETUP_GUIDE.md`), or turn the
+whole layer off with `llmVoicePhrasingEnabledProvider.overrideWithValue(false)`
+to hear the deterministic summaries instead.
+
+Plain text replies are *not* rephrased — the passenger is reading them on
+screen, so what they hear matches what they see.
+
 To see the error-handling paths, flip a flag on
 `MockBackendServer.instance` (see `docs/SETUP_GUIDE.md` §5) — e.g.
 `simulateSeatUnavailable = true` before confirming a seat produces a real

@@ -9,6 +9,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/flight_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/seat_remote_datasource.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/voice_phrasing_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/agent_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/airport_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/baggage_repository_impl.dart';
@@ -16,6 +17,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositori
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/chat_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/flight_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/seat_repository_impl.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/voice_phrasing_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/agent_repository.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/airport_repository.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/baggage_repository.dart';
@@ -23,6 +25,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/reposito
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/chat_repository.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/flight_repository.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/seat_repository.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/voice_phrasing_repository.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/classify_intent_usecase.dart';
@@ -32,9 +35,13 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_baggage_options_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_flight_status_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/get_seat_map_usecase.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/phrase_speech_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/search_flights_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/audio_cue_player.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/speech_phraser.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_narrator.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
 /// Toggle between the real Dio-backed data sources and the in-memory mocks.
@@ -60,6 +67,38 @@ final voiceServiceProvider = Provider<VoiceService>((ref) {
   final service = VoiceService();
   ref.onDispose(service.dispose);
   return service;
+});
+
+/// Whether spoken card summaries are worded by the phrasing model. Override
+/// with `false` to fall back to the deterministic summaries — useful when
+/// diagnosing whether odd spoken copy came from the model or from the app.
+final llmVoicePhrasingEnabledProvider = Provider<bool>((ref) => true);
+
+/// Chooses the words for each spoken turn. Falls back to the deterministic
+/// summary whenever phrasing is disabled, slow, or returns copy that no longer
+/// states the draft's facts (enforced by `SpokenFactGuard`).
+final speechPhraserProvider = Provider<SpeechPhraser>((ref) {
+  if (!ref.watch(llmVoicePhrasingEnabledProvider)) return const FallbackSpeechPhraser();
+  return LlmSpeechPhraser(phraseSpeech: ref.watch(phraseSpeechUseCaseProvider));
+});
+
+/// Serializes spoken output so a single turn is narrated as one continuous
+/// stretch of audio. Scope-level rather than per-view-model: the chat view
+/// model is `autoDispose`, and tearing the narrator down with it would close
+/// its stream for every later visit to the screen.
+final voiceNarratorProvider = Provider<VoiceNarrator>((ref) {
+  final narrator = VoiceNarrator(
+    voiceService: ref.watch(voiceServiceProvider),
+    phraser: ref.watch(speechPhraserProvider),
+  );
+  ref.onDispose(narrator.dispose);
+  return narrator;
+});
+
+final audioCuePlayerProvider = Provider<AudioCuePlayer>((ref) {
+  final player = AudioCuePlayer();
+  ref.onDispose(player.dispose);
+  return player;
 });
 
 /// The Hive box backing local chat history. Must be overridden in `main()`
@@ -103,6 +142,12 @@ final chatRemoteDataSourceProvider = Provider<ChatRemoteDataSource>((ref) {
   return OpenAiChatRemoteDataSource(ref.watch(dioProvider));
 });
 
+final voicePhrasingRemoteDataSourceProvider = Provider<VoicePhrasingRemoteDataSource>((ref) {
+  return ref.watch(useMockBackendProvider)
+      ? MockVoicePhrasingRemoteDataSource()
+      : LlmVoicePhrasingRemoteDataSource(ref.watch(dioProvider));
+});
+
 final agentRemoteDataSourceProvider = Provider<AgentRemoteDataSource>((ref) {
   return ref.watch(useMockBackendProvider)
       ? MockAgentRemoteDataSource()
@@ -139,6 +184,10 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 
 final agentRepositoryProvider = Provider<AgentRepository>((ref) {
   return AgentRepositoryImpl(ref.watch(agentRemoteDataSourceProvider));
+});
+
+final voicePhrasingRepositoryProvider = Provider<VoicePhrasingRepository>((ref) {
+  return VoicePhrasingRepositoryImpl(ref.watch(voicePhrasingRemoteDataSourceProvider));
 });
 
 final chatHistoryRepositoryProvider = Provider<ChatHistoryRepository>((ref) {
@@ -195,6 +244,10 @@ final getAirportDetailsUseCaseProvider = Provider<GetAirportDetailsUseCase>((ref
 
 final escalateToAgentUseCaseProvider = Provider<EscalateToAgentUseCase>((ref) {
   return EscalateToAgentUseCase(ref.watch(agentRepositoryProvider));
+});
+
+final phraseSpeechUseCaseProvider = Provider<PhraseSpeechUseCase>((ref) {
+  return PhraseSpeechUseCase(ref.watch(voicePhrasingRepositoryProvider));
 });
 
 final saveChatMessageUseCaseProvider = Provider<SaveChatMessageUseCase>((ref) {

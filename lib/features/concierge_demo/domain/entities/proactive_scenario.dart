@@ -66,7 +66,6 @@ class ProactiveScenario extends Equatable {
     required this.turns,
     required this.concludingAction,
     required this.availability,
-    required this.whyItMatters,
   });
 
   final String id;
@@ -80,7 +79,6 @@ class ProactiveScenario extends Equatable {
   final List<ScenarioTurn> turns;
   final ActionSummary concludingAction;
   final ScenarioAvailability availability;
-  final String whyItMatters;
 
   @override
   List<Object?> get props => [
@@ -92,6 +90,5 @@ class ProactiveScenario extends Equatable {
         turns,
         concludingAction,
         availability,
-        whyItMatters,
       ];
 }

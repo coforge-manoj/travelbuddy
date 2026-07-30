@@ -21,7 +21,7 @@ class SuggestedReplyChip extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 6),
             child: Text(
-              'Suggested reply',
+              'Suggestion',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.grey.shade500,
                   ),

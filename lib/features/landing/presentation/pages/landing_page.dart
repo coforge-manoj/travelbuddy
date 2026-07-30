@@ -1,26 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:ai_travel_assistant/core/services/concierge_visibility_store.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/routes/ai_travel_assistant_routes.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/presentation/widgets/proactive_feed_list.dart';
+import 'package:ai_travel_assistant/features/settings/presentation/pages/more_page.dart';
 
 /// Home/landing screen for the host app: a hero destination banner with a
 /// traveler summary card overlaid on it, quick navigation tabs, and a
 /// floating chat launcher that opens the AI Travel Assistant.
-class LandingPage extends StatelessWidget {
+class LandingPage extends ConsumerWidget {
   const LandingPage({super.key});
 
   static const _heroImageUrl = 'assets/images/LandingPage_BG.png';
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final conciergeVisible = ref.watch(conciergeVisibilityStoreProvider);
+
     return Scaffold(
       body: Stack(
         children: [
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _HeroSection(imageUrl: LandingPage._heroImageUrl),
-              Expanded(child: ProactiveFeedList()),
+              const _HeroSection(imageUrl: LandingPage._heroImageUrl),
+              Expanded(
+                child: conciergeVisible ? const ProactiveFeedList() : const _ConciergeHiddenNotice(),
+              ),
             ],
           ),
           Positioned(
@@ -35,6 +42,24 @@ class LandingPage extends StatelessWidget {
         ],
       ),
       bottomNavigationBar: const _HomeBottomNavBar(),
+    );
+  }
+}
+
+class _ConciergeHiddenNotice extends StatelessWidget {
+  const _ConciergeHiddenNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'Concierge moments are hidden. Turn them back on from the More tab.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+        ),
+      ),
     );
   }
 }
@@ -224,16 +249,26 @@ class _HomeBottomNavBar extends StatelessWidget {
           ),
         ],
       ),
-      child: const SafeArea(
+      child: SafeArea(
         child: SizedBox(
           height: 64,
           child: Row(
             children: [
-              Expanded(child: _NavItem(iconPath: 'assets/icons/home_icon.png', label: 'Home', selected: true)),
-              Expanded(child: _NavItem(iconPath: 'assets/icons/book_icon.png', label: 'Book')),
-              Expanded(child: _NavItem(iconPath: 'assets/icons/trips_icon.png', label: 'Trips')),
-              Expanded(child: _NavItem(iconPath: 'assets/icons/aadvantage_icon.png', label: 'AAdvantage®')),
-              Expanded(child: _NavItem(iconPath: 'assets/icons/more_icon.png', label: 'More')),
+              const Expanded(
+                child: _NavItem(iconPath: 'assets/icons/home_icon.png', label: 'Home', selected: true),
+              ),
+              const Expanded(child: _NavItem(iconPath: 'assets/icons/book_icon.png', label: 'Book')),
+              const Expanded(child: _NavItem(iconPath: 'assets/icons/trips_icon.png', label: 'Trips')),
+              const Expanded(
+                child: _NavItem(iconPath: 'assets/icons/aadvantage_icon.png', label: 'AAdvantage®'),
+              ),
+              Expanded(
+                child: _NavItem(
+                  iconPath: 'assets/icons/more_icon.png',
+                  label: 'More',
+                  onTap: () => Navigator.of(context).push(MorePage.route()),
+                ),
+              ),
             ],
           ),
         ),
@@ -243,31 +278,35 @@ class _HomeBottomNavBar extends StatelessWidget {
 }
 
 class _NavItem extends StatelessWidget {
-  const _NavItem({required this.iconPath, required this.label, this.selected = false});
+  const _NavItem({required this.iconPath, required this.label, this.selected = false, this.onTap});
 
   final String iconPath;
   final String label;
   final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final color = selected ? Theme.of(context).colorScheme.primary : Colors.grey.shade600;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Image.asset(
-          iconPath,
-          width: 22,
-          height: 22,
-          color: color,
-          colorBlendMode: BlendMode.srcIn,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
-        ),
-      ],
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset(
+            iconPath,
+            width: 22,
+            height: 22,
+            color: color,
+            colorBlendMode: BlendMode.srcIn,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+          ),
+        ],
+      ),
     );
   }
 }

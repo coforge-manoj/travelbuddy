@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:ai_travel_assistant/core/di/providers.dart';
+import 'package:ai_travel_assistant/core/services/local_notification_service.dart';
+import 'package:ai_travel_assistant/core/services/reminder_delay_store.dart';
+import 'package:ai_travel_assistant/core/services/voice_output_setting_store.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
@@ -24,6 +27,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/booking_session_store.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
+import 'package:ai_travel_assistant/features/concierge_demo/data/scenario_catalog.dart';
+import 'package:ai_travel_assistant/features/concierge_demo/domain/entities/proactive_scenario.dart';
 
 const _uuid = Uuid();
 
@@ -60,6 +65,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
     required SaveChatMessageUseCase saveChatMessageUseCase,
     required VoiceService voiceService,
     required BookingSessionStore bookingSessionStore,
+    required LocalNotificationService notificationService,
+    required int Function() getReminderDelaySeconds,
+    required bool Function() getVoiceOutputEnabled,
+    required void Function(String? scenarioId) setPendingNextScenarioId,
   })  : _sendMessageUseCase = sendMessageUseCase,
         _classifyIntentUseCase = classifyIntentUseCase,
         _getFlightStatusUseCase = getFlightStatusUseCase,
@@ -75,6 +84,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
         _saveChatMessageUseCase = saveChatMessageUseCase,
         _voiceService = voiceService,
         _bookingSessionStore = bookingSessionStore,
+        _notificationService = notificationService,
+        _getReminderDelaySeconds = getReminderDelaySeconds,
+        _getVoiceOutputEnabled = getVoiceOutputEnabled,
+        _setPendingNextScenarioId = setPendingNextScenarioId,
         super(const ChatState()) {
     _startNewSession();
   }
@@ -94,6 +107,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
   final SaveChatMessageUseCase _saveChatMessageUseCase;
   final VoiceService _voiceService;
   final BookingSessionStore _bookingSessionStore;
+  final LocalNotificationService _notificationService;
+  final int Function() _getReminderDelaySeconds;
+  final bool Function() _getVoiceOutputEnabled;
+  final void Function(String? scenarioId) _setPendingNextScenarioId;
 
   /// Every fresh entry into the chat screen (including navigating back and
   /// re-opening it — see the `autoDispose` on [chatViewModelProvider], which
@@ -101,7 +118,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// session: any previous local history is discarded and a welcome message
   /// seeds the conversation. Flight options are no longer shown proactively
   /// — they only appear once the passenger asks to book a flight (see
-  /// [_handleBookFlight]).
+  /// [_handleBookFlight]). If [ChatPage] immediately follows up with
+  /// [startScenarioById] — because the passenger opened straight into a use
+  /// case rather than plain chat — that call replaces this welcome message
+  /// rather than appending after it.
   Future<void> _startNewSession() async {
     unawaited(_clearChatHistoryUseCase());
 
@@ -112,7 +132,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
       timestamp: DateTime.now(),
       text: 'Hello $_demoTravelerFirstName! How can I help you today?',
     );
-    state = state.copyWith(status: ChatStatus.idle, messages: [welcome]);
+    state = state.copyWith(
+      status: ChatStatus.idle,
+      messages: [welcome],
+      isVoiceOutputEnabled: _getVoiceOutputEnabled(),
+    );
     unawaited(_saveChatMessageUseCase(welcome));
   }
 
@@ -221,13 +245,195 @@ class ChatViewModel extends StateNotifier<ChatState> {
     );
     state = state.copyWith(status: ChatStatus.sendingMessage, clearError: true);
 
-    final intentResult = await _classifyIntentUseCase(trimmed);
-    await intentResult.fold(
-      (failure) async => _appendError(failure.message),
-      (intent) async => _handleIntent(intent, trimmed),
-    );
+    if (state.hasActiveScenario) {
+      await _advanceScenario(trimmed);
+    } else {
+      final scenario = _matchScenario(trimmed);
+      if (scenario != null) {
+        await _startScenario(scenario);
+      } else {
+        final intentResult = await _classifyIntentUseCase(trimmed);
+        await intentResult.fold(
+          (failure) async => _appendError(failure.message),
+          (intent) async => _handleIntent(intent, trimmed),
+        );
+      }
+    }
 
     state = state.copyWith(status: ChatStatus.idle);
+  }
+
+  /// Looks for a [ProactiveScenario] whose opening line the free-typed
+  /// [utterance] is reaching for, so any of the 12 Journey Concierge use
+  /// cases can be triggered from the main chat — not only from the
+  /// standalone `ScenarioChatPage` reached via the home-screen proactive
+  /// feed. Scores every scenario by how many of its first turn's
+  /// [ScenarioTurn.matchKeywords] appear in the utterance and returns the
+  /// best match, or `null` if nothing scores above zero.
+  ProactiveScenario? _matchScenario(String utterance) {
+    final normalized = utterance.toLowerCase();
+    ProactiveScenario? best;
+    var bestScore = 0;
+    for (final scenario in scenarioCatalog) {
+      final score =
+          scenario.turns.first.matchKeywords.where(normalized.contains).length;
+      if (score > bestScore) {
+        bestScore = score;
+        best = scenario;
+      }
+    }
+    return best;
+  }
+
+  /// Kicks off [scenario] the way the reminder notification does: no
+  /// passenger message has matched anything yet, so this just posts the
+  /// scenario's push-notification-style opening line and leaves turn zero
+  /// waiting for a reply (via the suggested-reply chip or free text) — the
+  /// same starting point as tapping its card on the home-screen feed.
+  ///
+  /// Called whenever the chat opens straight into a use case — whether the
+  /// passenger tapped the reminder notification, or just opened the AI
+  /// assistant directly while one was pending (see [ChatPage]'s handling of
+  /// [pendingNextScenarioIdProvider]) — so it replaces whatever
+  /// [_startNewSession] already seeded (the plain "Hello" welcome) rather
+  /// than appending after it.
+  Future<void> startScenarioById(String scenarioId) async {
+    if (state.isBusy || state.hasActiveScenario) return;
+    final scenario = scenarioById(scenarioId);
+    if (scenario == null) return;
+
+    state = state.copyWith(messages: const []);
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: scenario.notificationText,
+      ),
+    );
+    state = state.copyWith(activeScenario: scenario, scenarioTurnIndex: 0);
+  }
+
+  /// Kicks off a scripted Journey Concierge conversation inline in the main
+  /// chat: the passenger's message already matched [scenario]'s opening
+  /// line, so this replies with that turn's concierge line (and, on a
+  /// single-turn scenario, its concluding action) the same way
+  /// [ScenarioChatViewModel] would in the standalone demo.
+  Future<void> _startScenario(ProactiveScenario scenario) async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: scenario.turns.first.conciergeReply,
+      ),
+    );
+    final isLastTurn = scenario.turns.length == 1;
+    if (isLastTurn) {
+      _appendMessage(
+        ChatMessage(
+          id: _uuid.v4(),
+          role: ChatRole.assistant,
+          type: ChatMessageType.actionSummaryCard,
+          timestamp: DateTime.now(),
+          payload: scenario.concludingAction,
+        ),
+      );
+      state = state.copyWith(clearActiveScenario: true, scenarioTurnIndex: 0);
+      _scheduleNextUseCaseReminder(scenario.id);
+    } else {
+      state = state.copyWith(activeScenario: scenario, scenarioTurnIndex: 1);
+    }
+  }
+
+  /// Advances the in-progress [ChatState.activeScenario] by one turn only
+  /// when the reply is reaching for that turn's resolution — i.e. the
+  /// utterance contains at least one of [ScenarioTurn.matchKeywords].
+  /// Anything else is treated as not understood: the scenario stays put on
+  /// the same turn (so the suggested-reply chip keeps offering the same
+  /// line) rather than silently skipping ahead.
+  Future<void> _advanceScenario(String utterance) async {
+    final scenario = state.activeScenario;
+    if (scenario == null) return;
+
+    final turnIndex = state.scenarioTurnIndex;
+    final turn = scenario.turns[turnIndex];
+    final normalized = utterance.toLowerCase();
+    final matchesTurn = turn.matchKeywords.any(normalized.contains);
+
+    if (!matchesTurn) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      _appendMessage(
+        ChatMessage(
+          id: _uuid.v4(),
+          role: ChatRole.assistant,
+          type: ChatMessageType.text,
+          timestamp: DateTime.now(),
+          text: "Sorry, I didn't quite catch that — could you try again?",
+        ),
+      );
+      return;
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+
+    final isLastTurn = turnIndex == scenario.turns.length - 1;
+
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: turn.conciergeReply,
+      ),
+    );
+
+    if (isLastTurn) {
+      _appendMessage(
+        ChatMessage(
+          id: _uuid.v4(),
+          role: ChatRole.assistant,
+          type: ChatMessageType.actionSummaryCard,
+          timestamp: DateTime.now(),
+          payload: scenario.concludingAction,
+        ),
+      );
+      state = state.copyWith(clearActiveScenario: true, scenarioTurnIndex: 0);
+      _scheduleNextUseCaseReminder(scenario.id);
+    } else {
+      state = state.copyWith(scenarioTurnIndex: turnIndex + 1);
+    }
+  }
+
+  /// Once [completedScenarioId] wraps up, nudges the passenger back with a
+  /// notification worded exactly like that next moment's in-character push
+  /// copy (e.g. "✈️ Family trip to Tokyo, April 4–15: award seats just
+  /// opened...") — it's meant to read like the concierge is following up,
+  /// not like a system reminder. Tapping it re-opens the chat page, which
+  /// calls [startScenarioById]. Also records [next] as "pending" (see
+  /// [pendingNextScenarioIdProvider]) — deliberately *not* cleared once
+  /// shown, only once overwritten by the scenario after it, so that
+  /// navigating back out before finishing it and reopening the assistant
+  /// still resumes the same use case instead of falling back to the plain
+  /// welcome message. Clears the pending marker after the last scenario in
+  /// the catalog, since the trip is over.
+  void _scheduleNextUseCaseReminder(String completedScenarioId) {
+    final next = nextScenarioAfter(completedScenarioId);
+    if (next == null) {
+      _setPendingNextScenarioId(null);
+      return;
+    }
+    _setPendingNextScenarioId(next.id);
+    _notificationService.showAfterDelay(
+      payload: next.id,
+      title: 'Journey Concierge',
+      body: next.notificationText,
+      delay: Duration(seconds: _getReminderDelaySeconds()),
+    );
   }
 
   Future<void> _handleIntent(IntentResult intent, String utterance) async {
@@ -632,6 +838,14 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 }
 
+/// The scenario a scheduled reminder currently points at, if any — set by
+/// [ChatViewModel._scheduleNextUseCaseReminder] and consumed by [ChatPage],
+/// so that opening the AI assistant directly (instead of tapping the
+/// notification) still resumes that next use case rather than showing the
+/// plain welcome message. Deliberately not `autoDispose`: it's set from one
+/// chat session and must survive to be read from a later, separate one.
+final pendingNextScenarioIdProvider = StateProvider<String?>((ref) => null);
+
 /// `autoDispose` so every fresh push of `ChatPage` (e.g. navigating back to
 /// the host app and re-opening the assistant) gets a brand-new
 /// [ChatViewModel] — and therefore a reset session — instead of resuming
@@ -653,5 +867,9 @@ final chatViewModelProvider = StateNotifierProvider.autoDispose<ChatViewModel, C
     saveChatMessageUseCase: ref.watch(saveChatMessageUseCaseProvider),
     voiceService: ref.watch(voiceServiceProvider),
     bookingSessionStore: ref.watch(bookingSessionStoreProvider),
+    notificationService: ref.watch(localNotificationServiceProvider),
+    getReminderDelaySeconds: () => ref.read(reminderDelayStoreProvider),
+    getVoiceOutputEnabled: () => ref.read(voiceOutputEnabledProvider),
+    setPendingNextScenarioId: (id) => ref.read(pendingNextScenarioIdProvider.notifier).state = id,
   );
 });

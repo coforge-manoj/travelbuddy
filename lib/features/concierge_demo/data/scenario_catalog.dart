@@ -19,8 +19,7 @@ final List<ProactiveScenario> scenarioCatalog = [
         "Marcus and Priya are half-planning a trip to see Priya's parents but haven't nailed "
         "dates, cost, or whether points can offset the fare for four people. Today's AA app "
         'gives them only a route/date search box.',
-    notificationText: '💬 No push here — this is where you start the conversation. Ask the '
-        'concierge about your family trip to Tokyo.',
+    notificationText: 'Are you looking to plan a family trip to Tokyo?',
     turns: [
       ScenarioTurn(
         parentLine: 'Best time for our family of 4 to fly to Tokyo this spring, and can we use '
@@ -56,15 +55,9 @@ final List<ProactiveScenario> scenarioCatalog = [
         '4 travelers, seats together on both legs',
         '≈\$1,180/person, or miles + cash blend',
       ],
-      footer: "AA's app has no natural-language or inspiration-led discovery today — this is "
-          'the moment that decides whether a family books AA at all.',
+      footer: '',
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA's app has zero natural-language or inspiration-led discovery — it's a standard "
-        'route/date search box. This is a full capability gap, and it\'s the moment that '
-        'decides whether a family books AA at all versus a carrier with a nonstop from '
-        'Atlanta.',
   ),
   const ProactiveScenario(
     id: 'inspire-deal-alert',
@@ -112,10 +105,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA surfaces deals only when a passenger actively searches; it doesn't watch behavior "
-        'and reach back out. For a family sitting on a five-figure fare decision, a '
-        'well-timed nudge is the difference between booking today and losing the sale.',
   ),
 
   // ---------------------------------------------------------------------
@@ -167,10 +156,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        'AA never checks document readiness at booking. For a family with a soon-to-expire '
-        "passport and a child who's never had one, this single check prevents the worst "
-        'outcome — a family turned away at the gate.',
   ),
   const ProactiveScenario(
     id: 'book-dfw-connection',
@@ -217,10 +202,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA shows connection time as a number but doesn't reason about what it means for "
-        'this traveler — two young kids, luggage, an international terminal change. Flagging '
-        'it removes real anxiety before it becomes a sprint through DFW.',
   ),
 
   // ---------------------------------------------------------------------
@@ -271,11 +252,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA doesn't offer leave-by guidance at all today, for any traveler. For a family "
-        'marshaling strollers, car seats and two kids through security, personalizing the '
-        'estimate for family logistics (not just traffic) is the difference between a calm '
-        'morning and a frantic one.',
   ),
   const ProactiveScenario(
     id: 'pretrip-prep-bundle',
@@ -321,10 +297,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA's app has no destination content of any kind pre-trip. For a first-time "
-        'international family trip, this kind of light, practical prep converts anxiety '
-        'into anticipation — a moment a static app simply cannot offer.',
   ),
 
   // ---------------------------------------------------------------------
@@ -372,10 +344,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.partial,
-    whyItMatters:
-        "AA shows security wait times at some airports, but doesn't proactively route "
-        'families to a family-specific lane or explain what changes for kids and strollers. '
-        'This removes the most stressful five minutes of the airport experience.',
   ),
   const ProactiveScenario(
     id: 'airport-dfw-layover',
@@ -421,10 +389,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA's app offers no proactive layover recommendations for any traveler, let alone "
-        'family-specific ones. Turning a 2-hour layover from dreaded to manageable builds '
-        'trust for the rest of the trip.',
   ),
 
   // ---------------------------------------------------------------------
@@ -474,10 +438,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA doesn't personalize the in-flight experience per passenger today — entertainment "
-        'and seating are static once boarded. For a long-haul family flight, proactively '
-        "managing a restless 8-year-old and a plugged-in 13-year-old is a felt difference.",
   ),
   const ProactiveScenario(
     id: 'inflight-arrival-prep',
@@ -523,10 +483,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        'AA offers no arrival preparation in-flight — status only. Right before an emotional '
-        'reunion, this turns the most stressful ten minutes of the trip into a guided, calm '
-        'one.',
   ),
 
   // ---------------------------------------------------------------------
@@ -573,11 +529,6 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.no,
-    whyItMatters:
-        "AA's guidance stops well short of a foreign arrival airport, and even domestically "
-        'its bag tracking is reactive. Giving carousel, seating and customs guidance the '
-        'moment they land removes friction at exactly the point the family wants to focus on '
-        'each other.',
   ),
   const ProactiveScenario(
     id: 'arrival-trip-wrapup',
@@ -623,9 +574,22 @@ final List<ProactiveScenario> scenarioCatalog = [
       ],
     ),
     availability: ScenarioAvailability.partial,
-    whyItMatters:
-        'AA shows miles earned only if a passenger checks their account, and never '
-        'proactively prepares a return journey. Closing the loop this way turns a single '
-        'trip into an ongoing relationship with the app.',
   ),
 ];
+
+/// Looks up a [ProactiveScenario] by [ProactiveScenario.id], or `null` if
+/// [scenarioId] doesn't match any catalog entry.
+ProactiveScenario? scenarioById(String scenarioId) {
+  final index = scenarioCatalog.indexWhere((s) => s.id == scenarioId);
+  return index == -1 ? null : scenarioCatalog[index];
+}
+
+/// The [ProactiveScenario] immediately after [scenarioId] in catalog order
+/// (Inspire → Arrival) — used to point the post-use-case reminder
+/// notification at the next moment in the Bennetts' trip. Returns `null` for
+/// an unknown id or for the last scenario, since the trip is over by then.
+ProactiveScenario? nextScenarioAfter(String scenarioId) {
+  final index = scenarioCatalog.indexWhere((s) => s.id == scenarioId);
+  if (index == -1 || index + 1 >= scenarioCatalog.length) return null;
+  return scenarioCatalog[index + 1];
+}

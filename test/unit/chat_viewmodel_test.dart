@@ -23,6 +23,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/search_flights_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart';
+import 'package:ai_travel_assistant/core/services/local_notification_service.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/booking_session_store.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
@@ -107,6 +109,11 @@ void main() {
       clearChatHistoryUseCase: ClearChatHistoryUseCase(historyRepository),
       saveChatMessageUseCase: SaveChatMessageUseCase(historyRepository),
       voiceService: VoiceService(),
+      bookingSessionStore: BookingSessionStore(),
+      notificationService: LocalNotificationService(),
+      getReminderDelaySeconds: () => 5,
+      getVoiceOutputEnabled: () => false,
+      setPendingNextScenarioId: (_) {},
     );
 
     // Let the constructor's initial session-start sequence (welcome message

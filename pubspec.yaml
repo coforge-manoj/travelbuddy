@@ -36,6 +36,9 @@ dependencies:
   speech_to_text: ^7.4.0
   flutter_tts: ^4.0.2
 
+  # Local notifications
+  flutter_local_notifications: ^17.2.3
+
   # Chat UI / markdown rendering
   flutter_markdown: ^0.7.1
 

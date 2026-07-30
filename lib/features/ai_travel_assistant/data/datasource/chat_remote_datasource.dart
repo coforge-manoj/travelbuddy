@@ -1,3 +1,4 @@
+import 'package:ai_travel_assistant/core/services/query_understand_service.dart';
 import 'package:dio/dio.dart';
 import 'package:ai_travel_assistant/core/errors/exceptions.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/chat_message_model.dart';
@@ -24,23 +25,8 @@ class OpenAiChatRemoteDataSource implements ChatRemoteDataSource {
 
   @override
   Future<IntentResult> classifyIntent(String userUtterance) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/chat/message',
-      data: {
-        'model': model,
-        'mode': 'intent_classification',
-        'input': userUtterance,
-      },
-    );
-    final data = response.data!;
-    return IntentResult(
-      type: IntentType.values.firstWhere(
-        (t) => t.name == data['intent'],
-        orElse: () => IntentType.unknown,
-      ),
-      confidence: (data['confidence'] as num?)?.toDouble() ?? 0.0,
-      entities: (data['entities'] as Map?)?.cast<String, String>() ?? const {},
-    );
+    IntentResult result= await QueryUnderstandingService.instance.summarizeInput(userUtterance);
+    return result;
   }
 
   @override

@@ -237,6 +237,8 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
 
     switch (intent.type) {
+      case IntentType.searchFlight:
+        await _handleSearchFlights(intent);
       case IntentType.bookFlight:
         await _handleBookFlight();
       case IntentType.flightStatus:
@@ -279,6 +281,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
         ),
       ),
     );
+  }
+
+
+  Future<void>_handleSearchFlights(IntentResult intent)async{
+    print("handle search flights");
   }
 
   Future<void> _handleSeatSelection() async {

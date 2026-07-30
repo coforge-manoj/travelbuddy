@@ -24,7 +24,7 @@ class IntentResult extends Equatable {
     required this.type,
     required this.confidence,
     this.entities = const {},
-    required this.originalMessage
+    this.originalMessage = '',
   });
 
   final IntentType type;
@@ -34,6 +34,9 @@ class IntentResult extends Equatable {
 
   /// Free-form slots extracted from the utterance, e.g. {'weightKg': '10'}.
   final Map<String, String> entities;
+
+  /// The passenger utterance that produced this classification. Optional so
+  /// callers that only care about [type] / [entities] stay concise.
   final String originalMessage;
 
   static const double lowConfidenceThreshold = 0.45;
@@ -41,5 +44,5 @@ class IntentResult extends Equatable {
   bool get isLowConfidence => confidence < lowConfidenceThreshold;
 
   @override
-  List<Object?> get props => [type, confidence, entities];
+  List<Object?> get props => [type, confidence, entities, originalMessage];
 }

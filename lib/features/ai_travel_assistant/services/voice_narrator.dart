@@ -59,6 +59,10 @@ class VoiceNarrator {
   bool _draining = false;
   bool _announcedSpeaking = false;
 
+  /// When false (app backgrounded / not visible), [enqueue] is a no-op and
+  /// any in-flight speech is discarded by [setSpeechAllowed].
+  bool _speechAllowed = true;
+
   /// Bumped by [stopAll] so an in-flight drain loop abandons the rest of its
   /// work instead of carrying on with utterances the user just cancelled.
   int _generation = 0;
@@ -71,9 +75,21 @@ class VoiceNarrator {
   bool get isBusy =>
       _draining || _buffer.isNotEmpty || _queue.isNotEmpty || _liveBatches.isNotEmpty;
 
+  bool get isSpeechAllowed => _speechAllowed;
+
+  /// Allows or blocks spoken output. Turning speech off silences anything
+  /// already queued or playing — used when the app leaves the foreground so
+  /// talkback never continues in the background.
+  Future<void> setSpeechAllowed(bool allowed) async {
+    if (_speechAllowed == allowed) return;
+    _speechAllowed = allowed;
+    if (!allowed) await stopAll();
+  }
+
   /// Queues [utterance] to be spoken exactly as given. Returns immediately;
   /// speech happens on the drain loop.
   void enqueue(String utterance) {
+    if (!_speechAllowed) return;
     final trimmed = utterance.trim();
     if (trimmed.isEmpty) return;
     _add(_PendingUtterance.text(trimmed));
@@ -82,7 +98,10 @@ class VoiceNarrator {
   /// Queues [draft] to be worded by the phraser and then spoken. Use this for
   /// card summaries, which exist only as speech and so have no on-screen
   /// wording to stay faithful to.
-  void enqueueDraft(SpokenDraft draft) => _add(_PendingUtterance.draft(draft));
+  void enqueueDraft(SpokenDraft draft) {
+    if (!_speechAllowed) return;
+    _add(_PendingUtterance.draft(draft));
+  }
 
   void _add(_PendingUtterance utterance) {
     _buffer.add(utterance);
@@ -174,7 +193,7 @@ class VoiceNarrator {
 
     try {
       while (_queue.isNotEmpty) {
-        if (generation != _generation) return;
+        if (generation != _generation || !_speechAllowed) return;
         final next = _queue.removeFirst();
         try {
           await _voiceService.speak(

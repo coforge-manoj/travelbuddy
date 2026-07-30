@@ -24,7 +24,7 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> {
+class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver {
   final _scrollController = ScrollController();
 
   /// When talkback is on, the passenger can temporarily prefer the text
@@ -32,9 +32,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _preferTypingWhileTalkback = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Sync the app-scoped narrator with the current lifecycle — a previous
+    // visit may have left speech blocked after a background.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final lifecycle =
+          WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+      ref.read(chatViewModelProvider.notifier).handleAppLifecycle(lifecycle);
+    });
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(chatViewModelProvider.notifier).handleAppLifecycle(state);
   }
 
   void _scrollToBottom() {

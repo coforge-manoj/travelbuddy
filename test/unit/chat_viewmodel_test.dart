@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -54,12 +55,23 @@ class _RecordingNarrator extends VoiceNarrator {
   final List<String> utterances = [];
   final List<SpokenDraft> drafts = [];
   int stopAllCount = 0;
+  bool speechAllowed = true;
 
   @override
-  void enqueue(String utterance) => utterances.add(utterance);
+  Future<void> setSpeechAllowed(bool allowed) async {
+    speechAllowed = allowed;
+    if (!allowed) await stopAll();
+  }
+
+  @override
+  void enqueue(String utterance) {
+    if (!speechAllowed) return;
+    utterances.add(utterance);
+  }
 
   @override
   void enqueueDraft(SpokenDraft draft) {
+    if (!speechAllowed) return;
     drafts.add(draft);
     utterances.add(draft.fallbackText);
   }
@@ -566,6 +578,31 @@ void main() {
       await pumpEventQueue();
 
       expect(narrator.utterances, hasLength(spokenBefore), reason: 'nothing more should be queued');
+    });
+
+    test('backgrounding the app silences talkback and blocks further speech', () async {
+      await showOffers();
+      final spokenBefore = narrator.utterances.length;
+      final stopsBefore = narrator.stopAllCount;
+
+      await viewModel.handleAppLifecycle(AppLifecycleState.paused);
+      await pumpEventQueue();
+
+      expect(narrator.speechAllowed, isFalse);
+      expect(narrator.stopAllCount, greaterThan(stopsBefore));
+
+      when(() => chatRepository.classifyIntent(any())).thenAnswer(
+        (_) async =>
+            const Result.success(IntentResult(type: IntentType.bookFlight, confidence: 0.95)),
+      );
+      await viewModel.sendMessage('show me flights');
+      await pumpEventQueue();
+
+      expect(narrator.utterances, hasLength(spokenBefore), reason: 'no speech while backgrounded');
+
+      await viewModel.handleAppLifecycle(AppLifecycleState.resumed);
+      await pumpEventQueue();
+      expect(narrator.speechAllowed, isTrue);
     });
 
     test('a stored talk-back preference is restored on a new session', () async {

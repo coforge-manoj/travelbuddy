@@ -265,6 +265,32 @@ void main() {
       expect(phraser.lastRecentlySpoken, ['Flight U A 4 8 2 is reserved.']);
     });
   });
+
+  group('foreground gate', () {
+    test('blocking speech discards the queue and rejects later enqueues', () async {
+      narrator.enqueue('You are all set.');
+      await Future<void>.delayed(window * 3);
+      expect(voice.spoken, ['You are all set.']);
+
+      await narrator.setSpeechAllowed(false);
+      expect(voice.stopCount, greaterThan(0));
+
+      narrator.enqueue('This should stay silent.');
+      await Future<void>.delayed(window * 3);
+      expect(voice.spoken, ['You are all set.']);
+      expect(narrator.isBusy, isFalse);
+    });
+
+    test('allowing speech again lets new utterances through', () async {
+      await narrator.setSpeechAllowed(false);
+      narrator.enqueue('Skipped while backgrounded.');
+      await narrator.setSpeechAllowed(true);
+      narrator.enqueue('Welcome back.');
+      await drainUntilIdle();
+
+      expect(voice.spoken, ['Welcome back.']);
+    });
+  });
 }
 
 SpokenDraft _draft(String topicTag) {

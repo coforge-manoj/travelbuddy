@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -160,6 +161,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
   Timer? _confirmationTimer;
   Timer? _listenWatchdog;
 
+  /// Talkback and cues only run while the app is in front. Kept in sync by
+  /// [handleAppLifecycle] from the chat screen's binding observer.
+  bool _appInForeground = true;
+
   /// Every fresh entry into the chat screen (including navigating back and
   /// re-opening it — see the `autoDispose` on [chatViewModelProvider], which
   /// tears this view model down when nothing is watching it) starts a clean
@@ -297,8 +302,9 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
 
     switch (intent.type) {
+      // The phrasing model returns `searchFlights` for "find / show / book
+      // flights"; both routes land on the same demo offers card.
       case IntentType.searchFlight:
-        await _handleSearchFlights(intent);
       case IntentType.bookFlight:
         await _handleBookFlight();
       case IntentType.flightStatus:
@@ -343,10 +349,6 @@ class ChatViewModel extends StateNotifier<ChatState> {
     );
   }
 
-
-  Future<void>_handleSearchFlights(IntentResult intent)async{
-    print("handle search flights");
-  }
 
   Future<void> _handleSeatSelection() async {
     final booking = _activeBooking;
@@ -889,6 +891,35 @@ class ChatViewModel extends StateNotifier<ChatState> {
   // Voice output
   // -------------------------------------------------------------------------
 
+  /// Keeps spoken output tied to app visibility. When the app leaves the
+  /// foreground, any in-flight talkback is silenced and further utterances
+  /// are dropped until the passenger is looking at the app again.
+  Future<void> handleAppLifecycle(AppLifecycleState lifecycle) async {
+    final inForeground = lifecycle == AppLifecycleState.resumed;
+    if (_appInForeground == inForeground) {
+      // Still push the gate onto the (app-scoped) narrator — a previous chat
+      // visit may have left it blocked after a background.
+      await _narrator.setSpeechAllowed(inForeground);
+      return;
+    }
+    _appInForeground = inForeground;
+
+    if (!inForeground) {
+      _cancelProactivePrompt();
+    }
+
+    await _narrator.setSpeechAllowed(inForeground);
+
+    if (!inForeground) {
+      // stopAll emits speaking:false, which would otherwise re-arm the
+      // proactive nudge timer while we are still in the background.
+      _cancelProactivePrompt();
+      if (mounted && state.status == ChatStatus.listening) {
+        await stopVoiceInput();
+      }
+    }
+  }
+
   /// Toggles whether assistant replies are read aloud, and remembers the
   /// choice for next time. Turning talkback off also stops any in-flight
   /// listening or speech so the UI can return to a quiet typing mode.
@@ -946,6 +977,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// follow-ups left.
   void _scheduleProactivePrompt() {
     _cancelProactivePrompt();
+    if (!_appInForeground) return;
     if (!state.isVoiceOutputEnabled) return;
     if (state.voiceContext.kind == VoiceContextKind.none) return;
     if (!_hasMoreProactiveSteps()) return;
@@ -1106,14 +1138,14 @@ class ChatViewModel extends StateNotifier<ChatState> {
       };
 
   Future<void> _playCue(AudioCue? cue) async {
-    if (cue == null || !state.isSoundEnabled) return;
+    if (cue == null || !state.isSoundEnabled || !_appInForeground) return;
     await _cues.play(cue);
   }
 
   /// Plays the mic-open cue to completion so it cannot overlap the
   /// recognizer's hold on the audio session.
   Future<void> _playListeningCue() async {
-    if (!state.isSoundEnabled) return;
+    if (!state.isSoundEnabled || !_appInForeground) return;
     await _cues.playAndAwait(AudioCue.listeningStart);
   }
 

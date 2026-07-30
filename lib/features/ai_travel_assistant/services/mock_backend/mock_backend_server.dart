@@ -251,8 +251,14 @@ class MockBackendServer {
     if (lower.contains('book') ||
         lower.contains('search flight') ||
         lower.contains('find a flight') ||
+        lower.contains('find flights') ||
+        lower.contains('available flight') ||
         lower.contains('new flight')) {
-      return  IntentResult(type: IntentType.bookFlight, confidence: 0.93, originalMessage: utterance);
+      return IntentResult(
+        type: IntentType.bookFlight,
+        confidence: 0.93,
+        originalMessage: utterance,
+      );
     }
     if (lower.contains('seat')) {
       return IntentResult(type: IntentType.seatSelection, confidence: 0.92,originalMessage: utterance);

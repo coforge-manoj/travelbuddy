@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
 
+import 'package:ai_travel_assistant/core/theme/app_theme.dart';
+
 /// Custom header for the chat screen, styled to match the host app's
 /// landing screen branding: back navigation, the TravelBuddy avatar/title,
-/// and an overflow menu.
+/// and a talkback toggle.
 class ChatHeader extends StatelessWidget {
-  const ChatHeader({super.key, required this.onBack, this.onMorePressed});
+  const ChatHeader({
+    super.key,
+    required this.onBack,
+    required this.isTalkbackEnabled,
+    required this.onTalkbackToggle,
+    this.onMorePressed,
+  });
 
   final VoidCallback onBack;
+  final bool isTalkbackEnabled;
+  final VoidCallback onTalkbackToggle;
   final VoidCallback? onMorePressed;
-
-  static const brandBlue = Color(0xFF0883F9);
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF14171C) : Colors.white,
+        color: ChatColors.bar(context),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -28,12 +35,12 @@ class ChatHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 16, 12),
+          padding: const EdgeInsets.fromLTRB(4, 4, 8, 12),
           child: Row(
             children: [
               IconButton(
                 onPressed: onBack,
-                icon: const Icon(Icons.arrow_back, color: brandBlue),
+                icon: const Icon(Icons.arrow_back, color: AppTheme.brandBlue),
               ),
               const _BuddyAvatar(size: 40),
               const SizedBox(width: 12),
@@ -57,7 +64,15 @@ class ChatHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              _MoreButton(onPressed: onMorePressed),
+              IconButton(
+                tooltip: isTalkbackEnabled ? 'Turn talkback off' : 'Turn talkback on',
+                onPressed: onTalkbackToggle,
+                icon: Icon(
+                  isTalkbackEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                  color: isTalkbackEnabled ? AppTheme.brandBlue : Colors.grey.shade500,
+                ),
+              ),
+              if (onMorePressed != null) _MoreButton(onPressed: onMorePressed),
             ],
           ),
         ),

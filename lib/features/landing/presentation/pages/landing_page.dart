@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:ai_travel_assistant/features/ai_travel_assistant/routes/ai_travel_assistant_routes.dart';
+import 'package:ai_travel_assistant/features/concierge_demo/presentation/widgets/proactive_feed_list.dart';
 
 /// Home/landing screen for the host app: a hero destination banner with a
 /// traveler summary card overlaid on it, quick navigation tabs, and a
@@ -19,7 +20,7 @@ class LandingPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _HeroSection(imageUrl: LandingPage._heroImageUrl),
-              Expanded(child: SizedBox.shrink()),
+              Expanded(child: ProactiveFeedList()),
             ],
           ),
           Positioned(

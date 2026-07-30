@@ -14,6 +14,7 @@ enum ChatMessageType {
   baggageSuccessCard,
   airportInfoCard,
   agentEscalationCard,
+  actionSummaryCard,
   error,
 }
 

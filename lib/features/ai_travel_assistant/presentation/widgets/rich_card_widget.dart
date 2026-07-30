@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/action_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/airport_info.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
@@ -9,6 +10,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/action_summary_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/airport/airport_info_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart';
@@ -46,6 +48,8 @@ class RichCardWidget extends ConsumerWidget {
           escalation: message.payload as EscalationResult?,
           text: message.text,
         ),
+      ChatMessageType.actionSummaryCard =>
+        ActionSummaryCard(summary: message.payload! as ActionSummary),
       ChatMessageType.text || ChatMessageType.error =>
         _AgentEscalationCard(escalation: null, text: message.text),
     };

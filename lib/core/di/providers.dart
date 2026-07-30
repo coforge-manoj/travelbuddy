@@ -148,6 +148,12 @@ final voicePhrasingRemoteDataSourceProvider = Provider<VoicePhrasingRemoteDataSo
       : LlmVoicePhrasingRemoteDataSource(ref.watch(dioProvider));
 });
 
+final voicePhrasingRemoteDataSourceProvider = Provider<VoicePhrasingRemoteDataSource>((ref) {
+  return ref.watch(useMockBackendProvider)
+      ? MockVoicePhrasingRemoteDataSource()
+      : LlmVoicePhrasingRemoteDataSource(ref.watch(dioProvider));
+});
+
 final agentRemoteDataSourceProvider = Provider<AgentRemoteDataSource>((ref) {
   return ref.watch(useMockBackendProvider)
       ? MockAgentRemoteDataSource()

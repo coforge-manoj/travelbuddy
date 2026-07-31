@@ -139,9 +139,7 @@ final airportRemoteDataSourceProvider = Provider<AirportRemoteDataSource>((ref) 
 });
 
 final chatRemoteDataSourceProvider = Provider<ChatRemoteDataSource>((ref) {
-  return ref.watch(useMockBackendProvider)
-      ? MockChatRemoteDataSource()
-      : OpenAiChatRemoteDataSource(ref.watch(dioProvider));
+  return OpenAiChatRemoteDataSource(ref.watch(dioProvider));
 });
 
 final voicePhrasingRemoteDataSourceProvider = Provider<VoicePhrasingRemoteDataSource>((ref) {

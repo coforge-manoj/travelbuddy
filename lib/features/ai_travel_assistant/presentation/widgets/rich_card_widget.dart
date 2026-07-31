@@ -9,6 +9,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/airport/airport_info_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart';
@@ -23,6 +24,10 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/wi
 /// touching [ChatPage]. The escalation card remains a lightweight built-in
 /// summary since a dedicated live-agent hand-off UI is out of this
 /// module's scope.
+///
+/// Card summaries are spoken aloud; they are not duplicated as a text bubble
+/// above the card. Confirmation messages (e.g. "Seat 14A confirmed") stay as
+/// plain assistant text bubbles from the view model.
 class RichCardWidget extends ConsumerWidget {
   const RichCardWidget({super.key, required this.message});
 
@@ -30,15 +35,30 @@ class RichCardWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final chatState = ref.watch(chatViewModelProvider);
     return switch (message.type) {
       ChatMessageType.flightStatusCard => FlightStatusCard(flight: message.payload! as Flight),
-      ChatMessageType.flightOffersCard =>
-        FlightOffersCard(offers: message.payload! as List<FlightOffer>),
+      ChatMessageType.flightOffersCard => FlightOffersCard(
+          offers: message.payload! as List<FlightOffer>,
+          isInteractive: message.isInteractive,
+          confirmedOfferId: chatState.confirmedOfferId,
+          hasPendingBooking: chatState.pendingBooking != null,
+        ),
       ChatMessageType.bookingConfirmationCard =>
         BookingConfirmationCard(summary: message.payload! as BookingSummary),
-      ChatMessageType.seatMapCard => SeatMapCard(seatMap: message.payload! as SeatMap),
-      ChatMessageType.baggageOptionsCard =>
-        BaggageOptionsCard(options: message.payload! as List<BaggageOption>),
+      ChatMessageType.seatMapCard => SeatMapCard(
+          seatMap: message.payload! as SeatMap,
+          isInteractive: message.isInteractive,
+          confirmedSeatNumber: chatState.confirmedSeatNumber,
+          highlightedSeatNumber: chatState.highlightedSeatNumber,
+          showSkip: chatState.hasActiveBookingFlow,
+        ),
+      ChatMessageType.baggageOptionsCard => BaggageOptionsCard(
+          options: message.payload! as List<BaggageOption>,
+          isInteractive: message.isInteractive,
+          confirmedOptionIds: chatState.confirmedBaggageOptionIds,
+          showSkip: chatState.hasActiveBookingFlow,
+        ),
       ChatMessageType.baggageSuccessCard =>
         BaggageSuccessCard(purchase: message.payload! as BaggagePurchase),
       ChatMessageType.airportInfoCard => AirportInfoCard(info: message.payload! as AirportInfo),
@@ -46,8 +66,10 @@ class RichCardWidget extends ConsumerWidget {
           escalation: message.payload as EscalationResult?,
           text: message.text,
         ),
-      ChatMessageType.text || ChatMessageType.error =>
-        _AgentEscalationCard(escalation: null, text: message.text),
+      ChatMessageType.text || ChatMessageType.error => _AgentEscalationCard(
+          escalation: null,
+          text: message.text,
+        ),
     };
   }
 }

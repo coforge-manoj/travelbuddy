@@ -7,6 +7,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/spoken_draft.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/display_text_formatter.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/speech_text_formatter.dart';
 
 /// Builds the short spoken version of a chat message.
@@ -84,10 +85,14 @@ class VoiceSummaryBuilder {
     return SpokenDraft(
       topic: draft.topic,
       fallbackText: SpeechTextFormatter.clean(draft.fallbackText),
+      displayFallbackText: draft.displayFallbackText == null
+          ? null
+          : SpeechTextFormatter.clean(draft.displayFallbackText!),
       clauses: draft.clauses.map(SpeechTextFormatter.clean).toList(growable: false),
       invitation: draft.invitation,
       tone: draft.tone,
       mustInclude: draft.mustInclude.map(SpeechTextFormatter.clean).toList(growable: false),
+      displayMustInclude: draft.displayMustInclude,
     );
   }
 
@@ -100,15 +105,22 @@ class VoiceSummaryBuilder {
         invitation: SpokenInvitation.offerOtherDates,
         fallbackText: "I'm sorry, I couldn't find any flights on that route. "
             'Would you like to try a different date or destination?',
+        displayFallbackText: "I'm sorry, I couldn't find any flights on that route. "
+            'Would you like to try a different date or destination?',
       );
     }
 
     final route = 'from ${SpeechTextFormatter.airport(offers.first.origin)} '
         'to ${SpeechTextFormatter.airport(offers.first.destination)}';
+    final displayRoute = 'from ${DisplayTextFormatter.airport(offers.first.origin)} '
+        'to ${DisplayTextFormatter.airport(offers.first.destination)}';
     final cheapest = offers.reduce((a, b) => b.price < a.price ? b : a);
     final fare = SpeechTextFormatter.price(cheapest.price, cheapest.currency);
+    final displayFare = DisplayTextFormatter.price(cheapest.price, cheapest.currency);
     final describedCheapest =
         '${cheapest.airline} at $fare, departing ${SpeechTextFormatter.time(cheapest.departureTime)}';
+    final displayCheapest =
+        '${cheapest.airline} at $displayFare, departing ${DisplayTextFormatter.time(cheapest.departureTime)}';
 
     if (offers.length == 1) {
       return SpokenDraft(
@@ -116,7 +128,10 @@ class VoiceSummaryBuilder {
         clauses: ['the one flight $route is $describedCheapest'],
         invitation: SpokenInvitation.confirmSingleOffer,
         mustInclude: [cheapest.airline, fare],
+        displayMustInclude: [cheapest.airline, displayFare],
         fallbackText: 'I found one flight $route: $describedCheapest. '
+            'Would you like me to book it for you?',
+        displayFallbackText: 'I found one flight $displayRoute: $displayCheapest. '
             'Would you like me to book it for you?',
       );
     }
@@ -129,41 +144,59 @@ class VoiceSummaryBuilder {
       ],
       invitation: SpokenInvitation.chooseOffer,
       mustInclude: [cheapest.airline, fare],
+      displayMustInclude: [cheapest.airline, displayFare],
       fallbackText: 'I found ${offers.length} flights $route. '
           'The cheapest is $describedCheapest. '
           "You're welcome to name an airline, or ask for the cheapest one.",
+      displayFallbackText: 'I found ${offers.length} flights $displayRoute. '
+          'The cheapest is $displayCheapest. '
+          'Name an airline, or ask for the cheapest one.',
     );
   }
 
   static SpokenDraft _flightStatus(Flight flight) {
     final number = SpeechTextFormatter.flightNumber(flight.flightNumber);
+    final displayNumber = DisplayTextFormatter.flightNumber(flight.flightNumber);
     final buffer = StringBuffer(_statusLead(number, flight.status));
+    final displayBuffer = StringBuffer(_statusLead(displayNumber, flight.status));
     final clauses = <String>[_statusClause(number, flight.status)];
     final mustInclude = <String>[number];
+    final displayMustInclude = <String>[displayNumber];
 
     final departure = flight.estimatedDeparture ?? flight.scheduledDeparture;
     final departureTime = SpeechTextFormatter.time(departure);
+    final displayDepartureTime = DisplayTextFormatter.time(departure);
     if (flight.isDelayed && flight.estimatedDeparture != null) {
       buffer.write(' The new departure is $departureTime.');
+      displayBuffer.write(' The new departure is $displayDepartureTime.');
       clauses.add('the new departure time is $departureTime');
       mustInclude.add(departureTime);
+      displayMustInclude.add(displayDepartureTime);
     } else if (flight.status != FlightStatus.cancelled) {
       buffer.write(' Departure is $departureTime.');
+      displayBuffer.write(' Departure is $displayDepartureTime.');
       clauses.add('departure is at $departureTime');
       mustInclude.add(departureTime);
+      displayMustInclude.add(displayDepartureTime);
     }
 
     if (flight.gate != null) {
       final gate = SpeechTextFormatter.code(flight.gate!);
+      final displayGate = DisplayTextFormatter.code(flight.gate!);
       buffer.write(' Gate $gate.');
+      displayBuffer.write(' Gate $displayGate.');
       clauses.add('the gate is $gate');
       mustInclude.add(gate);
+      displayMustInclude.add(displayGate);
     }
     if (flight.terminal != null) {
       final terminal = SpeechTextFormatter.code(flight.terminal!);
+      final displayTerminal = DisplayTextFormatter.code(flight.terminal!);
       buffer.write(' Terminal $terminal.');
+      displayBuffer.write(' Terminal $displayTerminal.');
       clauses.add('it goes from terminal $terminal');
       mustInclude.add(terminal);
+      displayMustInclude.add(displayTerminal);
     }
 
     final disrupted = flight.status == FlightStatus.delayed ||
@@ -175,7 +208,9 @@ class VoiceSummaryBuilder {
       clauses: clauses,
       invitation: SpokenInvitation.anythingElse,
       mustInclude: mustInclude,
+      displayMustInclude: displayMustInclude,
       fallbackText: buffer.toString(),
+      displayFallbackText: displayBuffer.toString(),
     );
   }
 
@@ -210,6 +245,8 @@ class VoiceSummaryBuilder {
         invitation: SpokenInvitation.anythingElse,
         fallbackText: "I've put the seat map on your screen, but there aren't any free "
             "seats to choose from right now. I'm happy to help another way if you'd like.",
+        displayFallbackText: "I've put the seat map on your screen, but there aren't any free "
+            "seats to choose from right now. I'm happy to help another way if you'd like.",
       );
     }
 
@@ -227,6 +264,8 @@ class VoiceSummaryBuilder {
       invitation: SpokenInvitation.chooseSeat,
       fallbackText: "I've put the seat map on your screen. Would you like a window, "
           'an aisle, or a specific seat like ${SpeechTextFormatter.seat(example.seatNumber)}?',
+      displayFallbackText: "I've put the seat map on your screen. Would you like a window, "
+          'an aisle, or a specific seat like ${DisplayTextFormatter.seat(example.seatNumber)}?',
     );
   }
 
@@ -238,6 +277,8 @@ class VoiceSummaryBuilder {
         clauses: ["there aren't any extra baggage options for this flight"],
         invitation: SpokenInvitation.anythingElse,
         fallbackText: "I'm afraid there aren't any extra baggage options for this flight.",
+        displayFallbackText:
+            "I'm afraid there aren't any extra baggage options for this flight.",
       );
     }
 
@@ -247,7 +288,10 @@ class VoiceSummaryBuilder {
       clauses: ['you can add ${_asList(weights)} extra kilos'],
       invitation: SpokenInvitation.chooseBaggage,
       mustInclude: weights,
+      displayMustInclude: weights,
       fallbackText: "You're welcome to add ${_asList(weights)} kilos. Which would you prefer?",
+      displayFallbackText:
+          "You're welcome to add ${_asList(weights)} kilos. Which would you prefer?",
     );
   }
 
@@ -262,6 +306,8 @@ class VoiceSummaryBuilder {
         ],
         fallbackText: "I'm sorry, that baggage purchase didn't go through. "
             "Please try again whenever you're ready.",
+        displayFallbackText: "I'm sorry, that baggage purchase didn't go through. "
+            "Please try again whenever you're ready.",
       );
     }
 
@@ -272,36 +318,50 @@ class VoiceSummaryBuilder {
       clauses: ['$kilos extra kilos are confirmed'],
       invitation: SpokenInvitation.anythingElse,
       mustInclude: [kilos],
+      displayMustInclude: [kilos],
       fallbackText: 'All set — $kilos extra kilos are confirmed.',
+      displayFallbackText: 'All set — $kilos extra kilos are confirmed.',
     );
   }
 
   static SpokenDraft _bookingConfirmation(BookingSummary summary, {DateTime? now}) {
     final flight = summary.booking.flight;
     final pnr = SpeechTextFormatter.code(summary.booking.pnr);
+    final displayPnr = DisplayTextFormatter.code(summary.booking.pnr);
     final buffer = StringBuffer("You're all set. Your confirmation is $pnr.");
+    final displayBuffer = StringBuffer("You're all set. Your confirmation is $displayPnr.");
     final clauses = <String>['your confirmation code is $pnr'];
     final mustInclude = <String>[pnr];
+    final displayMustInclude = <String>[displayPnr];
 
     if (summary.seatNumber != null) {
       final seat = SpeechTextFormatter.seat(summary.seatNumber!);
+      final displaySeat = DisplayTextFormatter.seat(summary.seatNumber!);
       buffer.write(' Seat $seat.');
+      displayBuffer.write(' Seat $displaySeat.');
       clauses.add('your seat is $seat');
       mustInclude.add(seat);
+      displayMustInclude.add(displaySeat);
     }
     if (summary.extraBaggageKg > 0) {
       final kilos = _number(summary.extraBaggageKg);
       buffer.write(' $kilos extra kilos of baggage.');
+      displayBuffer.write(' $kilos extra kilos of baggage.');
       clauses.add('$kilos extra kilos of baggage are included');
       mustInclude.add(kilos);
+      displayMustInclude.add(kilos);
     }
 
     final departure = flight.scheduledDeparture;
     final day = SpeechTextFormatter.relativeDay(departure, now: now);
+    final displayDay = DisplayTextFormatter.relativeDay(departure, now: now);
     final time = SpeechTextFormatter.time(departure);
+    final displayTime = DisplayTextFormatter.time(departure);
     buffer.write(' Departing $day at $time. Have a wonderful trip.');
+    displayBuffer.write(' Departing $displayDay at $displayTime. Have a wonderful trip.');
     clauses.add('you depart $day at $time');
     mustInclude.add(time);
+    displayMustInclude.add(displayTime);
 
     return SpokenDraft(
       topic: SpokenTopic.bookingConfirmed,
@@ -309,7 +369,9 @@ class VoiceSummaryBuilder {
       clauses: clauses,
       invitation: SpokenInvitation.wishWell,
       mustInclude: mustInclude,
+      displayMustInclude: displayMustInclude,
       fallbackText: buffer.toString(),
+      displayFallbackText: displayBuffer.toString(),
     );
   }
 
@@ -317,14 +379,23 @@ class VoiceSummaryBuilder {
     final terminal = SpeechTextFormatter.code(info.terminal);
     final gate = SpeechTextFormatter.code(info.gate);
     final counter = SpeechTextFormatter.code(info.checkInCounter);
+    final displayTerminal = DisplayTextFormatter.code(info.terminal);
+    final displayGate = DisplayTextFormatter.code(info.gate);
+    final displayCounter = DisplayTextFormatter.code(info.checkInCounter);
 
     final buffer = StringBuffer(
       "Here's what you'll need: terminal $terminal, gate $gate, "
       'and check-in counter $counter.',
     );
+    final displayBuffer = StringBuffer(
+      "Here's what you'll need: terminal $displayTerminal, gate $displayGate, "
+      'and check-in counter $displayCounter.',
+    );
     buffer.write(" It's about a ${info.walkingTimeMinutes} minute walk.");
+    displayBuffer.write(" It's about a ${info.walkingTimeMinutes} minute walk.");
     if (info.directions.isNotEmpty) {
       buffer.write(' ${SpeechTextFormatter.clean(info.directions.first)}');
+      displayBuffer.write(' ${info.directions.first}');
     }
 
     return SpokenDraft(
@@ -337,7 +408,9 @@ class VoiceSummaryBuilder {
       ],
       invitation: SpokenInvitation.anythingElse,
       mustInclude: [terminal, gate, counter],
+      displayMustInclude: [displayTerminal, displayGate, displayCounter],
       fallbackText: buffer.toString(),
+      displayFallbackText: displayBuffer.toString(),
     );
   }
 
@@ -355,7 +428,11 @@ class VoiceSummaryBuilder {
       ],
       invitation: SpokenInvitation.awaitAgent,
       mustInclude: [position, wait],
+      displayMustInclude: [position, wait],
       fallbackText: "Of course — I'm connecting you to an agent now. "
+          "You're number $position in the queue, "
+          'with about $wait minutes to wait.',
+      displayFallbackText: "Of course — I'm connecting you to an agent now. "
           "You're number $position in the queue, "
           'with about $wait minutes to wait.',
     );

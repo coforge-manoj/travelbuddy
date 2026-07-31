@@ -16,6 +16,7 @@ class ChatMessageModel with _$ChatMessageModel {
     @Default('') String text,
     Map<String, dynamic>? payload,
     @Default(false) bool isStreaming,
+    @Default(true) bool isInteractive,
   }) = _ChatMessageModel;
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) =>
@@ -31,6 +32,7 @@ class ChatMessageModel with _$ChatMessageModel {
       payload:
           entity.payload is Map<String, dynamic> ? entity.payload as Map<String, dynamic> : null,
       isStreaming: entity.isStreaming,
+      isInteractive: entity.isInteractive,
     );
   }
 
@@ -43,6 +45,7 @@ class ChatMessageModel with _$ChatMessageModel {
       text: text,
       payload: payload,
       isStreaming: isStreaming,
+      isInteractive: isInteractive,
     );
   }
 }

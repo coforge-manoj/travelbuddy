@@ -22,40 +22,55 @@ class SpokenFactGuard {
   /// Returns the speech-ready utterance, or `null` when [candidate] must not
   /// be spoken.
   static String? verify(String candidate, SpokenDraft draft) {
+    return _verify(
+      candidate,
+      mustInclude: draft.mustInclude,
+      numberSources: [...draft.clauses, ...draft.mustInclude, draft.fallbackText],
+      fallbackLength: draft.fallbackText.length,
+    );
+  }
+
+  /// Same fact checks for an on-screen caption, using readable must-include
+  /// fragments ("5:05 AM", "$165") rather than speech spelling.
+  static String? verifyDisplay(String candidate, SpokenDraft draft) {
+    final fallback = draft.displayFallbackText ?? draft.fallbackText;
+    final mustInclude =
+        draft.displayMustInclude.isNotEmpty ? draft.displayMustInclude : draft.mustInclude;
+    return _verify(
+      candidate,
+      mustInclude: mustInclude,
+      numberSources: [fallback, ...mustInclude],
+      fallbackLength: fallback.length,
+    );
+  }
+
+  static String? _verify(
+    String candidate, {
+    required List<String> mustInclude,
+    required List<String> numberSources,
+    required int fallbackLength,
+  }) {
     final cleaned = SpeechTextFormatter.clean(candidate);
     if (cleaned.isEmpty) return null;
-    if (cleaned.length > _charLimitFor(draft)) return null;
+    final generous = (fallbackLength * 1.7).round();
+    final limit = generous.clamp(160, hardMaxChars);
+    if (cleaned.length > limit) return null;
 
-    // More than one question in a spoken turn leaves the passenger unsure
-    // which one to answer.
     if (RegExp(r'\?').allMatches(cleaned).length > 1) return null;
 
     final normalized = _normalize(cleaned);
-    for (final fragment in draft.mustInclude) {
+    for (final fragment in mustInclude) {
       final needle = _normalize(fragment);
       if (needle.isEmpty) continue;
       if (!normalized.contains(needle)) return null;
     }
 
-    // Every number spoken has to come from the draft. Catches both invented
-    // figures and quietly rounded ones ("about 180 dollars").
-    final permitted = _numbersIn([...draft.clauses, ...draft.mustInclude, draft.fallbackText]);
+    final permitted = _numbersIn(numberSources);
     for (final number in _numbersIn([cleaned])) {
       if (!permitted.contains(number)) return null;
     }
 
     return cleaned;
-  }
-
-  /// A phrasing may be a little longer than the deterministic version — that
-  /// is often what makes it sound human — but not unboundedly so.
-  ///
-  /// The floor matters as much as the cap: the shortest summaries are one
-  /// clause long, and a warm rendering of one clause plus a closing question
-  /// still runs to about 160 characters.
-  static int _charLimitFor(SpokenDraft draft) {
-    final generous = (draft.fallbackText.length * 1.7).round();
-    return generous.clamp(160, hardMaxChars);
   }
 
   static Set<String> _numbersIn(Iterable<String> sources) {

@@ -12,9 +12,14 @@ class VoicePhrasingRepositoryImpl implements VoicePhrasingRepository {
   Future<Result<String>> phrase({
     required SpokenDraft draft,
     List<String> recentlySpoken = const [],
+    bool forDisplay = false,
   }) {
     return safeCall(
-      () => _remote.phrase(draft: draft, recentlySpoken: recentlySpoken),
+      () => _remote.phrase(
+        draft: draft,
+        recentlySpoken: recentlySpoken,
+        forDisplay: forDisplay,
+      ),
     );
   }
 }

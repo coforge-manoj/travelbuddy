@@ -27,6 +27,7 @@ mixin _$ChatMessageModel {
   String get text => throw _privateConstructorUsedError;
   Map<String, dynamic>? get payload => throw _privateConstructorUsedError;
   bool get isStreaming => throw _privateConstructorUsedError;
+  bool get isInteractive => throw _privateConstructorUsedError;
 
   /// Serializes this ChatMessageModel to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -51,7 +52,8 @@ abstract class $ChatMessageModelCopyWith<$Res> {
       String timestamp,
       String text,
       Map<String, dynamic>? payload,
-      bool isStreaming});
+      bool isStreaming,
+      bool isInteractive});
 }
 
 /// @nodoc
@@ -76,6 +78,7 @@ class _$ChatMessageModelCopyWithImpl<$Res, $Val extends ChatMessageModel>
     Object? text = null,
     Object? payload = freezed,
     Object? isStreaming = null,
+    Object? isInteractive = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -106,6 +109,10 @@ class _$ChatMessageModelCopyWithImpl<$Res, $Val extends ChatMessageModel>
           ? _value.isStreaming
           : isStreaming // ignore: cast_nullable_to_non_nullable
               as bool,
+      isInteractive: null == isInteractive
+          ? _value.isInteractive
+          : isInteractive // ignore: cast_nullable_to_non_nullable
+              as bool,
     ) as $Val);
   }
 }
@@ -125,7 +132,8 @@ abstract class _$$ChatMessageModelImplCopyWith<$Res>
       String timestamp,
       String text,
       Map<String, dynamic>? payload,
-      bool isStreaming});
+      bool isStreaming,
+      bool isInteractive});
 }
 
 /// @nodoc
@@ -148,6 +156,7 @@ class __$$ChatMessageModelImplCopyWithImpl<$Res>
     Object? text = null,
     Object? payload = freezed,
     Object? isStreaming = null,
+    Object? isInteractive = null,
   }) {
     return _then(_$ChatMessageModelImpl(
       id: null == id
@@ -178,6 +187,10 @@ class __$$ChatMessageModelImplCopyWithImpl<$Res>
           ? _value.isStreaming
           : isStreaming // ignore: cast_nullable_to_non_nullable
               as bool,
+      isInteractive: null == isInteractive
+          ? _value.isInteractive
+          : isInteractive // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }
@@ -192,7 +205,8 @@ class _$ChatMessageModelImpl extends _ChatMessageModel {
       required this.timestamp,
       this.text = '',
       final Map<String, dynamic>? payload,
-      this.isStreaming = false})
+      this.isStreaming = false,
+      this.isInteractive = true})
       : _payload = payload,
         super._();
 
@@ -223,10 +237,13 @@ class _$ChatMessageModelImpl extends _ChatMessageModel {
   @override
   @JsonKey()
   final bool isStreaming;
+  @override
+  @JsonKey()
+  final bool isInteractive;
 
   @override
   String toString() {
-    return 'ChatMessageModel(id: $id, role: $role, type: $type, timestamp: $timestamp, text: $text, payload: $payload, isStreaming: $isStreaming)';
+    return 'ChatMessageModel(id: $id, role: $role, type: $type, timestamp: $timestamp, text: $text, payload: $payload, isStreaming: $isStreaming, isInteractive: $isInteractive)';
   }
 
   @override
@@ -242,13 +259,23 @@ class _$ChatMessageModelImpl extends _ChatMessageModel {
             (identical(other.text, text) || other.text == text) &&
             const DeepCollectionEquality().equals(other._payload, _payload) &&
             (identical(other.isStreaming, isStreaming) ||
-                other.isStreaming == isStreaming));
+                other.isStreaming == isStreaming) &&
+            (identical(other.isInteractive, isInteractive) ||
+                other.isInteractive == isInteractive));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, role, type, timestamp, text,
-      const DeepCollectionEquality().hash(_payload), isStreaming);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      role,
+      type,
+      timestamp,
+      text,
+      const DeepCollectionEquality().hash(_payload),
+      isStreaming,
+      isInteractive);
 
   /// Create a copy of ChatMessageModel
   /// with the given fields replaced by the non-null parameter values.
@@ -275,7 +302,8 @@ abstract class _ChatMessageModel extends ChatMessageModel {
       required final String timestamp,
       final String text,
       final Map<String, dynamic>? payload,
-      final bool isStreaming}) = _$ChatMessageModelImpl;
+      final bool isStreaming,
+      final bool isInteractive}) = _$ChatMessageModelImpl;
   const _ChatMessageModel._() : super._();
 
   factory _ChatMessageModel.fromJson(Map<String, dynamic> json) =
@@ -295,6 +323,8 @@ abstract class _ChatMessageModel extends ChatMessageModel {
   Map<String, dynamic>? get payload;
   @override
   bool get isStreaming;
+  @override
+  bool get isInteractive;
 
   /// Create a copy of ChatMessageModel
   /// with the given fields replaced by the non-null parameter values.

@@ -34,7 +34,8 @@ void main() {
     test('the first nudge offers the cheapest option and arms it for a yes', () {
       final prompt = ProactivePromptBuilder.build(VoiceContext.flightOffers(offers), 0)!;
 
-      expect(prompt.text, contains('Delta Air Lines at 176 dollars'));
+      expect(prompt.text, contains('Delta Air Lines at \$176'));
+      expect(prompt.speechText, contains('Delta Air Lines at 176 dollars'));
       expect((prompt.suggestedAction! as SelectOfferAction).offer.id, 'DL2071');
     });
 

@@ -14,7 +14,12 @@ class PhraseSpeechUseCase {
   Future<Result<String>> call({
     required SpokenDraft draft,
     List<String> recentlySpoken = const [],
+    bool forDisplay = false,
   }) {
-    return _repository.phrase(draft: draft, recentlySpoken: recentlySpoken);
+    return _repository.phrase(
+      draft: draft,
+      recentlySpoken: recentlySpoken,
+      forDisplay: forDisplay,
+    );
   }
 }

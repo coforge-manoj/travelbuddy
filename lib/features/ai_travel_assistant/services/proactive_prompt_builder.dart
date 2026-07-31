@@ -1,6 +1,7 @@
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/display_text_formatter.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/speech_text_formatter.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_action_resolver.dart';
 
@@ -9,10 +10,17 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_
 /// conversational, so answering it can never commit the passenger to
 /// anything.
 class ProactivePrompt {
-  const ProactivePrompt(this.text, {this.suggestedAction});
+  const ProactivePrompt(this.text, {this.spokenText, this.suggestedAction});
 
+  /// On-screen wording (readable times and prices).
   final String text;
+
+  /// Optional TTS wording when it should differ from [text].
+  final String? spokenText;
+
   final VoiceAction? suggestedAction;
+
+  String get speechText => spokenText ?? text;
 }
 
 /// Builds the nudges the assistant offers when a passenger goes quiet in
@@ -54,8 +62,11 @@ class ProactivePromptBuilder {
             final cheapest = offers.reduce((a, b) => b.price < a.price ? b : a);
             return ProactivePrompt(
               'Whenever you are ready — the cheapest option is ${cheapest.airline} at '
-              '${SpeechTextFormatter.price(cheapest.price, cheapest.currency)}. '
+              '${DisplayTextFormatter.price(cheapest.price, cheapest.currency)}. '
               'Would you like me to book that for you?',
+              spokenText: 'Whenever you are ready — the cheapest option is ${cheapest.airline} at '
+                  '${SpeechTextFormatter.price(cheapest.price, cheapest.currency)}. '
+                  'Would you like me to book that for you?',
               suggestedAction: SelectOfferAction(cheapest),
             );
           case 1:

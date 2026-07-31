@@ -4,12 +4,16 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/phrase_speech_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/spoken_fact_guard.dart';
 
-/// Chooses the words for one spoken turn.
+/// Chooses the words for one spoken turn, and optionally an on-screen caption.
 abstract interface class SpeechPhraser {
   /// Always resolves to something speakable. Implementations must never throw
   /// and never return an empty string — voice output degrading to silence is
   /// worse than voice output sounding plain.
   Future<String> phrase(SpokenDraft draft, {List<String> recentlySpoken});
+
+  /// Readable chat-bubble wording for the same draft. May differ from what is
+  /// spoken (e.g. "5:05 AM" on screen vs "5 oh 5" aloud).
+  Future<String> phraseDisplay(SpokenDraft draft, {List<String> recentlySpoken});
 }
 
 /// Speaks the draft's deterministic text. Used when LLM phrasing is switched
@@ -20,6 +24,11 @@ class FallbackSpeechPhraser implements SpeechPhraser {
   @override
   Future<String> phrase(SpokenDraft draft, {List<String> recentlySpoken = const []}) async {
     return draft.fallbackText;
+  }
+
+  @override
+  Future<String> phraseDisplay(SpokenDraft draft, {List<String> recentlySpoken = const []}) async {
+    return draft.displayFallbackText ?? draft.fallbackText;
   }
 }
 
@@ -62,6 +71,28 @@ class LlmSpeechPhraser implements SpeechPhraser {
         if (verified == null) {
           lastRejectedPhrasing = phrasing;
           return draft.fallbackText;
+        }
+        return verified;
+      },
+    );
+  }
+
+  @override
+  Future<String> phraseDisplay(SpokenDraft draft, {List<String> recentlySpoken = const []}) async {
+    final fallback = draft.displayFallbackText ?? draft.fallbackText;
+    final result = await _phraseSpeech(
+      draft: draft,
+      recentlySpoken: recentlySpoken,
+      forDisplay: true,
+    ).timeout(timeout, onTimeout: () => const Result<String>.failure(TimeoutFailure()));
+
+    return result.fold(
+      (_) => fallback,
+      (phrasing) {
+        final verified = SpokenFactGuard.verifyDisplay(phrasing, draft);
+        if (verified == null) {
+          lastRejectedPhrasing = phrasing;
+          return fallback;
         }
         return verified;
       },

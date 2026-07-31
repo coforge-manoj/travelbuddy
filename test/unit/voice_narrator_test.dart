@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/spoken_draft.dart';
@@ -12,6 +13,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_
 /// test, so serialization can be observed rather than guessed at.
 class _FakeVoiceService extends VoiceService {
   final List<String> spoken = [];
+  final List<String> prewarmed = [];
   final List<double> pitches = [];
   final List<double> rates = [];
   final List<Completer<void>> _pending = [];
@@ -22,18 +24,37 @@ class _FakeVoiceService extends VoiceService {
     String text, {
     double pitch = SpeechProsodyPlanner.statementPitch,
     double rate = SpeechProsodyPlanner.statementRate,
+    VoidCallback? onAudible,
   }) {
     spoken.add(text);
     pitches.add(pitch);
     rates.add(rate);
+    // A real engine reports this once sound reaches the speaker; here that is
+    // the moment the utterance starts.
+    onAudible?.call();
     final completer = Completer<void>();
     _pending.add(completer);
     return completer.future;
   }
 
   @override
+  void prewarm(
+    String text, {
+    double pitch = SpeechProsodyPlanner.statementPitch,
+    double rate = SpeechProsodyPlanner.statementRate,
+  }) {
+    prewarmed.add(text);
+  }
+
+  /// When false, [stopSpeaking] silences the engine without releasing the
+  /// utterance already in flight — what a real engine does when the clip it is
+  /// playing reports neither completion nor cancellation.
+  bool releasesOnStop = true;
+
+  @override
   Future<void> stopSpeaking() async {
     stopCount++;
+    if (!releasesOnStop) return;
     for (final completer in _pending) {
       if (!completer.isCompleted) completer.complete();
     }
@@ -68,7 +89,7 @@ void main() {
   /// Waits for coalesce, then completes each segment until the narrator is idle.
   Future<void> drainUntilIdle() async {
     await Future<void>.delayed(window * 3);
-    for (var i = 0; i < 50 && narrator.isBusy; i++) {
+    for (var i = 0; i < 200 && narrator.isBusy; i++) {
       voice.finishCurrent();
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
@@ -133,17 +154,62 @@ void main() {
     expect(narrator.isBusy, isFalse);
   });
 
-  test('reports speaking while busy and idle once drained', () async {
-    final states = <bool>[];
-    narrator.speakingChanges.listen(states.add);
+  test('the turn after a barge-in is spoken even if the interrupted one hangs', () async {
+    // The passenger picks a seat while the assistant is mid-sentence: the
+    // reply to that tap has to be heard even though the abandoned utterance
+    // has not let go of the engine yet.
+    voice.releasesOnStop = false;
+    narrator.enqueue('Being cut off.');
+    await Future<void>.delayed(window * 3);
+    expect(voice.spoken, ['Being cut off.']);
+
+    await narrator.stopAll();
+    narrator.enqueue('The next step.');
+    await Future<void>.delayed(window * 3);
+
+    expect(voice.spoken, ['Being cut off.', 'The next step.']);
+  });
+
+  test('stays in preparing until audio is audible, then speaking, then idle', () async {
+    final phases = <NarrationPhase>[];
+    narrator.phaseChanges.listen(phases.add);
 
     narrator.enqueue('Anything.');
+    // Before the coalesce window elapses nothing has reached the engine, so
+    // the turn is committed but silent.
+    await Future<void>.delayed(Duration.zero);
+    expect(phases, [NarrationPhase.preparing]);
+
     await Future<void>.delayed(window * 3);
-    expect(states, [true]);
+    expect(phases, [NarrationPhase.preparing, NarrationPhase.speaking]);
 
     voice.finishCurrent();
     await Future<void>.delayed(window * 3);
-    expect(states, [true, false]);
+    expect(phases, [
+      NarrationPhase.preparing,
+      NarrationPhase.speaking,
+      NarrationPhase.idle,
+    ]);
+  });
+
+  test('an utterance appended mid-turn does not drop back to preparing', () async {
+    final phases = <NarrationPhase>[];
+    narrator.phaseChanges.listen(phases.add);
+
+    narrator.enqueue('First turn.');
+    await Future<void>.delayed(window * 3);
+    narrator.enqueue('Second turn.');
+    await Future<void>.delayed(window * 3);
+
+    expect(phases, [NarrationPhase.preparing, NarrationPhase.speaking]);
+  });
+
+  test('the follow-on segment is synthesized while the current one plays', () async {
+    narrator.enqueue('The seat map is on screen. Window or aisle?');
+    await Future<void>.delayed(window * 3);
+
+    expect(voice.spoken, ['The seat map is on screen.']);
+    expect(voice.prewarmed, ['Window or aisle?']);
   });
 
   test('blank utterances are ignored', () async {
@@ -186,7 +252,7 @@ void main() {
     tearDown(() => phrasing.dispose());
 
     Future<void> settle() async {
-      for (var i = 0; i < 50 && phrasing.isBusy; i++) {
+      for (var i = 0; i < 200 && phrasing.isBusy; i++) {
         voice.finishCurrent();
         await Future<void>.delayed(const Duration(milliseconds: 5));
       }
@@ -254,6 +320,23 @@ void main() {
 
       expect(voice.spoken, isEmpty);
       expect(phrasing.isBusy, isFalse);
+    });
+
+    test('a draft that words to nothing returns to idle instead of hanging', () async {
+      final phases = <NarrationPhase>[];
+      phrasing.phaseChanges.listen(phases.add);
+      phraser.answers['flight_offers'] = '   ';
+
+      phrasing.enqueueDraft(_draft('flight_offers'));
+      await Future<void>.delayed(window * 5);
+
+      expect(voice.spoken, isEmpty);
+      expect(phrasing.isBusy, isFalse);
+      expect(
+        phases,
+        [NarrationPhase.preparing, NarrationPhase.idle],
+        reason: 'a turn with nothing to say must not leave the UI mid-narration',
+      );
     });
 
     test('the phraser is shown what the passenger has already heard', () async {
@@ -324,6 +407,11 @@ class _ScriptedPhraser implements SpeechPhraser {
     }
     if (throwFor.contains(tag)) throw StateError('phraser broke');
     return answers[tag] ?? draft.fallbackText;
+  }
+
+  @override
+  Future<String> phraseDisplay(SpokenDraft draft, {List<String> recentlySpoken = const []}) async {
+    return draft.displayFallbackText ?? draft.fallbackText;
   }
 
   void release(String tag) {

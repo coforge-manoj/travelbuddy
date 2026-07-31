@@ -16,6 +16,7 @@ _$ChatMessageModelImpl _$$ChatMessageModelImplFromJson(
       text: json['text'] as String? ?? '',
       payload: json['payload'] as Map<String, dynamic>?,
       isStreaming: json['isStreaming'] as bool? ?? false,
+      isInteractive: json['isInteractive'] as bool? ?? true,
     );
 
 Map<String, dynamic> _$$ChatMessageModelImplToJson(
@@ -28,4 +29,5 @@ Map<String, dynamic> _$$ChatMessageModelImplToJson(
       'text': instance.text,
       'payload': instance.payload,
       'isStreaming': instance.isStreaming,
+      'isInteractive': instance.isInteractive,
     };

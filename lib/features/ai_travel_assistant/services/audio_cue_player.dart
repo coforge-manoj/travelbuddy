@@ -1,6 +1,8 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_audio_contexts.dart';
+
 /// The non-verbal feedback vocabulary of the assistant.
 enum AudioCue {
   /// The microphone just opened.
@@ -82,31 +84,11 @@ class AudioCuePlayer {
     if (_configured) return player;
     _configured = true;
 
-    // audioplayers applies its global audio context to the *shared* iOS
-    // audio session, and its default category is `playback` — output only,
-    // which is hostile to the recognizer that shares that session. Declare
-    // a record-capable context matching what speech_to_text sets, so cues
-    // never leave the session in a state the microphone cannot use.
-    await AudioPlayer.global.setAudioContext(
-      AudioContext(
-        iOS: AudioContextIOS(
-          category: AVAudioSessionCategory.playAndRecord,
-          options: const {
-            AVAudioSessionOptions.defaultToSpeaker,
-            AVAudioSessionOptions.allowBluetooth,
-            AVAudioSessionOptions.allowBluetoothA2DP,
-            AVAudioSessionOptions.mixWithOthers,
-          },
-        ),
-        // Short interface cues should duck other audio briefly, not seize
-        // permanent focus the way the `media`/`gain` defaults do.
-        android: const AudioContextAndroid(
-          contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.assistanceSonification,
-          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
-        ),
-      ),
-    );
+    // Scoped to this player, never to `AudioPlayer.global`: a global context
+    // is shared by every player in the process, so the cue profile below
+    // would also decide how spoken answers are routed. See
+    // [VoiceAudioContexts].
+    await player.setAudioContext(VoiceAudioContexts.cues);
     await player.setReleaseMode(ReleaseMode.stop);
     // Quiet enough to sit under speech rather than compete with it.
     await player.setVolume(0.35);

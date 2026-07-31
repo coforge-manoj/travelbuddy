@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -80,6 +82,51 @@ class _RecordingNarrator extends VoiceNarrator {
   Future<void> stopAll() async => stopAllCount++;
 }
 
+/// A recording narrator that also reports the phase edges a real one would.
+///
+/// The view model hands the microphone back on the narrator's idle edge, so
+/// tests that care about that handoff need the edges without needing a TTS
+/// engine: `preparing` arrives with the utterance, `speaking` and `idle` are
+/// driven by the test.
+class _PhasedNarrator extends _RecordingNarrator {
+  _PhasedNarrator(super.voiceService);
+
+  final _phases = StreamController<NarrationPhase>.broadcast();
+  NarrationPhase _phase = NarrationPhase.idle;
+
+  @override
+  Stream<NarrationPhase> get phaseChanges => _phases.stream;
+
+  @override
+  NarrationPhase get phase => _phase;
+
+  @override
+  bool get isBusy => _phase != NarrationPhase.idle;
+
+  @override
+  void enqueue(String utterance) {
+    super.enqueue(utterance);
+    if (speechAllowed) emit(NarrationPhase.preparing);
+  }
+
+  @override
+  void enqueueDraft(SpokenDraft draft) {
+    super.enqueueDraft(draft);
+    if (speechAllowed) emit(NarrationPhase.preparing);
+  }
+
+  @override
+  Future<void> stopAll() async {
+    await super.stopAll();
+    emit(NarrationPhase.idle);
+  }
+
+  void emit(NarrationPhase phase) {
+    _phase = phase;
+    _phases.add(phase);
+  }
+}
+
 class _RecordingCuePlayer extends AudioCuePlayer {
   final List<AudioCue> played = [];
 
@@ -113,7 +160,7 @@ class _FakeTalkBackStore implements TalkBackPreferenceStore {
 /// Lets tests drive STT results and session-end without platform channels.
 class _ControllableVoiceService extends VoiceService {
   void Function(String transcript, bool isFinal)? _onResult;
-  void Function()? _onListeningEnded;
+  void Function(VoiceListenEndReason reason)? _onListeningEnded;
   int stopListeningCount = 0;
   bool startSucceeds = true;
   Duration? lastListenFor;
@@ -122,7 +169,7 @@ class _ControllableVoiceService extends VoiceService {
   @override
   Future<bool> startListening({
     required void Function(String transcript, bool isFinal) onResult,
-    void Function()? onListeningEnded,
+    void Function(VoiceListenEndReason reason)? onListeningEnded,
     String? localeId,
     Duration listenFor = const Duration(seconds: 15),
     Duration pauseFor = const Duration(seconds: 3),
@@ -144,8 +191,10 @@ class _ControllableVoiceService extends VoiceService {
     _onResult?.call(transcript, isFinal);
   }
 
-  void emitListeningEnded() {
-    _onListeningEnded?.call();
+  void emitListeningEnded({
+    VoiceListenEndReason reason = VoiceListenEndReason.completed,
+  }) {
+    _onListeningEnded?.call(reason);
   }
 }
 
@@ -205,6 +254,37 @@ void main() {
     ),
   ];
 
+  /// Every construction site wants the same pile of use cases; only the voice
+  /// collaborators differ from test to test.
+  ChatViewModel assembleViewModel({
+    VoiceService? voiceService,
+    VoiceNarrator? voiceNarrator,
+    AudioCuePlayer? audioCuePlayer,
+    BookingSessionStore? bookingSessionStore,
+    TalkBackPreferenceStore? talkBackPreferenceStore,
+  }) {
+    return ChatViewModel(
+      sendMessageUseCase: SendMessageUseCase(chatRepository),
+      classifyIntentUseCase: ClassifyIntentUseCase(chatRepository),
+      getFlightStatusUseCase: GetFlightStatusUseCase(flightRepository),
+      getSeatMapUseCase: GetSeatMapUseCase(seatRepository),
+      changeSeatUseCase: ChangeSeatUseCase(seatRepository),
+      getBaggageOptionsUseCase: GetBaggageOptionsUseCase(baggageRepository),
+      purchaseBaggageUseCase: PurchaseBaggageUseCase(baggageRepository),
+      getAirportDetailsUseCase: GetAirportDetailsUseCase(airportRepository),
+      escalateToAgentUseCase: EscalateToAgentUseCase(agentRepository),
+      searchFlightsUseCase: SearchFlightsUseCase(flightRepository),
+      bookFlightUseCase: BookFlightUseCase(flightRepository),
+      clearChatHistoryUseCase: ClearChatHistoryUseCase(historyRepository),
+      saveChatMessageUseCase: SaveChatMessageUseCase(historyRepository),
+      voiceService: voiceService ?? VoiceService(),
+      voiceNarrator: voiceNarrator ?? _RecordingNarrator(VoiceService()),
+      audioCuePlayer: audioCuePlayer ?? _RecordingCuePlayer(),
+      bookingSessionStore: bookingSessionStore ?? BookingSessionStore(),
+      talkBackPreferenceStore: talkBackPreferenceStore ?? _FakeTalkBackStore(),
+    );
+  }
+
   setUpAll(() {
     registerFallbackValue(
       ChatMessage(
@@ -240,21 +320,7 @@ void main() {
     talkBack = _FakeTalkBackStore();
     bookingStore = BookingSessionStore();
 
-    viewModel = ChatViewModel(
-      sendMessageUseCase: SendMessageUseCase(chatRepository),
-      classifyIntentUseCase: ClassifyIntentUseCase(chatRepository),
-      getFlightStatusUseCase: GetFlightStatusUseCase(flightRepository),
-      getSeatMapUseCase: GetSeatMapUseCase(seatRepository),
-      changeSeatUseCase: ChangeSeatUseCase(seatRepository),
-      getBaggageOptionsUseCase: GetBaggageOptionsUseCase(baggageRepository),
-      purchaseBaggageUseCase: PurchaseBaggageUseCase(baggageRepository),
-      getAirportDetailsUseCase: GetAirportDetailsUseCase(airportRepository),
-      escalateToAgentUseCase: EscalateToAgentUseCase(agentRepository),
-      searchFlightsUseCase: SearchFlightsUseCase(flightRepository),
-      bookFlightUseCase: BookFlightUseCase(flightRepository),
-      clearChatHistoryUseCase: ClearChatHistoryUseCase(historyRepository),
-      saveChatMessageUseCase: SaveChatMessageUseCase(historyRepository),
-      voiceService: VoiceService(),
+    viewModel = assembleViewModel(
       voiceNarrator: narrator,
       audioCuePlayer: cues,
       bookingSessionStore: bookingStore,
@@ -370,19 +436,57 @@ void main() {
         ),
       ).thenAnswer((_) async => const Result.success(purchase));
 
+      when(() => chatRepository.classifyIntent(any())).thenAnswer(
+        (_) async =>
+            const Result.success(IntentResult(type: IntentType.bookFlight, confidence: 0.95)),
+      );
+      await viewModel.sendMessage('I want to book a flight');
+      await pumpEventQueue();
+      expect(viewModel.state.messages.last.type, ChatMessageType.flightOffersCard);
+      expect(viewModel.state.messages.last.isInteractive, isTrue);
+
       await viewModel.selectFlightOffer('UA482');
       await pumpEventQueue();
       expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
+      expect(
+        viewModel.state.messages
+            .where((m) => m.type == ChatMessageType.flightOffersCard)
+            .every((m) => !m.isInteractive),
+        isTrue,
+      );
+      expect(viewModel.state.confirmedOfferId, 'UA482');
 
       await viewModel.confirmSeatChange('14A');
       await pumpEventQueue();
       expect(viewModel.state.messages.last.type, ChatMessageType.baggageOptionsCard);
       expect(viewModel.state.pendingSeatNumber, '14A');
+      expect(viewModel.state.confirmedSeatNumber, '14A');
+      expect(
+        viewModel.state.messages
+            .where((m) => m.type == ChatMessageType.seatMapCard)
+            .every((m) => !m.isInteractive),
+        isTrue,
+      );
 
       await viewModel.confirmBaggagePurchase('bag_10kg');
       await pumpEventQueue();
       expect(viewModel.state.messages.last.type, ChatMessageType.baggageSuccessCard);
       expect(viewModel.state.pendingBaggagePurchases, [purchase]);
+      expect(viewModel.state.confirmedBaggageOptionIds, ['bag_10kg']);
+      expect(
+        viewModel.state.messages
+            .where((m) => m.type == ChatMessageType.baggageOptionsCard)
+            .every((m) => !m.isInteractive),
+        isTrue,
+      );
+
+      // Scrollback re-selection must be a no-op once cards are locked.
+      final messageCount = viewModel.state.messages.length;
+      await viewModel.selectFlightOffer('UA482');
+      await viewModel.confirmSeatChange('14A');
+      await viewModel.confirmBaggagePurchase('bag_10kg');
+      await pumpEventQueue();
+      expect(viewModel.state.messages.length, messageCount);
 
       await viewModel.finishBooking();
       await pumpEventQueue();
@@ -414,6 +518,45 @@ void main() {
 
     expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
     expect(viewModel.state.messages.last.payload, seatMap);
+  });
+
+  test('asking for a seat again with the map already up does not stack a second one', () async {
+    bookingStore.confirmedBooking = demoBooking();
+    when(() => chatRepository.classifyIntent(any())).thenAnswer(
+      (_) async =>
+          const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.95)),
+    );
+    const seatMap = SeatMap(
+      flightNumber: 'FZ123',
+      rows: 1,
+      seats: [
+        Seat(
+          seatNumber: '14C',
+          row: 14,
+          column: 'C',
+          type: SeatType.aisle,
+          availability: SeatAvailability.available,
+        ),
+      ],
+    );
+    when(() => seatRepository.getSeatMap(any()))
+        .thenAnswer((_) async => const Result.success(seatMap));
+
+    await viewModel.sendMessage('I want to choose a seat');
+    await pumpEventQueue();
+    expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
+
+    // The same request again names no seat. Re-running the intent would push
+    // an identical map underneath the first, which reads as nothing having
+    // happened — ask which seat instead.
+    await viewModel.sendMessage('I want to choose a seat');
+    await pumpEventQueue();
+
+    expect(
+      viewModel.state.messages.where((m) => m.type == ChatMessageType.seatMapCard),
+      hasLength(1),
+    );
+    expect(viewModel.state.messages.last.text, contains('Which seat would you like?'));
   });
 
   test('low-confidence intent offers human escalation instead of guessing', () async {
@@ -486,7 +629,10 @@ void main() {
         '176 dollars, departing 12 30 in the afternoon. '
         "You're welcome to name an airline, or ask for the cheapest one.",
       );
-      // The card's own caption is never what gets spoken.
+      // On-screen caption uses readable times/prices, not speech spelling.
+      expect(viewModel.state.messages.last.text, contains(r'$176'));
+      expect(viewModel.state.messages.last.text, contains('12:30 PM'));
+      expect(viewModel.state.messages.last.text, isNot(contains('oh')));
       expect(narrator.utterances, isNot(contains(viewModel.state.messages.last.text)));
     });
 
@@ -508,6 +654,25 @@ void main() {
       when(() => seatRepository.getSeatMap(any()))
           .thenAnswer((_) async => const Result.success(seatMap));
       when(
+        () => seatRepository.changeSeat(
+          pnr: any(named: 'pnr'),
+          flightNumber: any(named: 'flightNumber'),
+          seatNumber: any(named: 'seatNumber'),
+        ),
+      ).thenAnswer(
+        (_) async => Result.success(
+          const Seat(
+            seatNumber: '14A',
+            row: 14,
+            column: 'A',
+            type: SeatType.window,
+            availability: SeatAvailability.selected,
+          ),
+        ),
+      );
+      when(() => baggageRepository.getBaggageOptions(any()))
+          .thenAnswer((_) async => const Result.success(<BaggageOption>[]));
+      when(
         () => flightRepository.bookFlight(
           offerId: any(named: 'offerId'),
           passengerName: any(named: 'passengerName'),
@@ -528,20 +693,111 @@ void main() {
         ),
       );
 
-      // Establish a booking so the seat-selection intent has a flight to recap.
+      // Establish a booking so the seat map is on screen for voice/text choice.
       await viewModel.selectFlightOffer('UA482');
       await pumpEventQueue();
       narrator.utterances.clear();
 
-      when(() => chatRepository.classifyIntent(any())).thenAnswer(
-        (_) async =>
-            const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.95)),
-      );
+      // With the seat card up, typed "window" goes through the card action
+      // path (same as voice) rather than re-fetching the map via intent.
       await viewModel.sendMessage('I want a window seat');
       await pumpEventQueue();
 
       expect(narrator.utterances.any((line) => line.contains('PNR')), isFalse);
-      expect(narrator.utterances.last, contains("I've put the seat map on your screen"));
+      verify(
+        () => seatRepository.changeSeat(
+          pnr: any(named: 'pnr'),
+          flightNumber: 'UA482',
+          seatNumber: '14A',
+        ),
+      ).called(1);
+    });
+
+    test('a confirmed seat reads the same on screen either way, and asks for bags only once',
+        () async {
+      const seatMap = SeatMap(
+        flightNumber: 'UA482',
+        rows: 1,
+        seats: [
+          Seat(
+            seatNumber: '14A',
+            row: 14,
+            column: 'A',
+            type: SeatType.window,
+            availability: SeatAvailability.available,
+          ),
+        ],
+      );
+      when(() => seatRepository.getSeatMap(any()))
+          .thenAnswer((_) async => const Result.success(seatMap));
+      when(
+        () => seatRepository.changeSeat(
+          pnr: any(named: 'pnr'),
+          flightNumber: any(named: 'flightNumber'),
+          seatNumber: any(named: 'seatNumber'),
+        ),
+      ).thenAnswer(
+        (_) async => const Result.success(
+          Seat(
+            seatNumber: '14A',
+            row: 14,
+            column: 'A',
+            type: SeatType.window,
+            availability: SeatAvailability.selected,
+          ),
+        ),
+      );
+      when(() => baggageRepository.getBaggageOptions(any())).thenAnswer(
+        (_) async => const Result.success(<BaggageOption>[
+          BaggageOption(id: 'bag-10', extraWeightKg: 10, price: 40),
+        ]),
+      );
+      when(
+        () => flightRepository.bookFlight(
+          offerId: any(named: 'offerId'),
+          passengerName: any(named: 'passengerName'),
+        ),
+      ).thenAnswer(
+        (_) async => Result.success(
+          Booking(
+            pnr: 'TB123456',
+            passengerName: 'Joe Traveler',
+            flight: Flight(
+              flightNumber: 'UA482',
+              origin: 'EWR',
+              destination: 'ORD',
+              status: FlightStatus.scheduled,
+              scheduledDeparture: DateTime(2026, 1, 2, 6, 45),
+            ),
+          ),
+        ),
+      );
+
+      await viewModel.selectFlightOffer('UA482');
+      await pumpEventQueue();
+      narrator.utterances.clear();
+
+      // Spoken route into the same handler the seat map's Confirm button uses.
+      await viewModel.handleVoiceTranscript('window seat please');
+      await pumpEventQueue();
+
+      final confirmation = viewModel.state.messages.firstWhere(
+        (message) => message.text.startsWith('Seat 14A confirmed'),
+      );
+      expect(confirmation.text, 'Seat 14A confirmed. ✅ Want to add any baggage?');
+      expect(viewModel.state.confirmedSeatNumber, '14A');
+
+      // The bubble keeps the question on screen; the audio leaves it to the
+      // baggage card queued right behind it, so it is only ever heard once.
+      expect(narrator.utterances, contains('Seat 14 A confirmed.'));
+      expect(
+        narrator.utterances.where((line) => line.contains('baggage')),
+        isEmpty,
+      );
+      expect(
+        narrator.utterances.where((line) => line.contains('kilos')),
+        hasLength(1),
+      );
     });
 
     test('an error is spoken, cued, and persisted like any other message', () async {
@@ -607,26 +863,7 @@ void main() {
 
     test('a stored talk-back preference is restored on a new session', () async {
       final store = _FakeTalkBackStore(false);
-      final restored = ChatViewModel(
-        sendMessageUseCase: SendMessageUseCase(chatRepository),
-        classifyIntentUseCase: ClassifyIntentUseCase(chatRepository),
-        getFlightStatusUseCase: GetFlightStatusUseCase(flightRepository),
-        getSeatMapUseCase: GetSeatMapUseCase(seatRepository),
-        changeSeatUseCase: ChangeSeatUseCase(seatRepository),
-        getBaggageOptionsUseCase: GetBaggageOptionsUseCase(baggageRepository),
-        purchaseBaggageUseCase: PurchaseBaggageUseCase(baggageRepository),
-        getAirportDetailsUseCase: GetAirportDetailsUseCase(airportRepository),
-        escalateToAgentUseCase: EscalateToAgentUseCase(agentRepository),
-        searchFlightsUseCase: SearchFlightsUseCase(flightRepository),
-        bookFlightUseCase: BookFlightUseCase(flightRepository),
-        clearChatHistoryUseCase: ClearChatHistoryUseCase(historyRepository),
-        saveChatMessageUseCase: SaveChatMessageUseCase(historyRepository),
-        voiceService: VoiceService(),
-        voiceNarrator: _RecordingNarrator(VoiceService()),
-        audioCuePlayer: _RecordingCuePlayer(),
-        bookingSessionStore: BookingSessionStore(),
-        talkBackPreferenceStore: store,
-      );
+      final restored = assembleViewModel(talkBackPreferenceStore: store);
       await pumpEventQueue();
 
       expect(restored.state.isVoiceOutputEnabled, isFalse);
@@ -680,8 +917,9 @@ void main() {
       );
 
       final readBack = viewModel.state.messages.last;
-      expect(readBack.text, contains('176 dollars'));
+      expect(readBack.text, contains(r'$176'));
       expect(readBack.text, contains('Would you like me to book it for you?'));
+      expect(readBack.text, isNot(contains('oh')));
       expect(viewModel.state.pendingConfirmation, isA<SelectOfferAction>());
     });
 
@@ -807,20 +1045,7 @@ void main() {
       talkBack = _FakeTalkBackStore();
       bookingStore = BookingSessionStore();
 
-      return ChatViewModel(
-        sendMessageUseCase: SendMessageUseCase(chatRepository),
-        classifyIntentUseCase: ClassifyIntentUseCase(chatRepository),
-        getFlightStatusUseCase: GetFlightStatusUseCase(flightRepository),
-        getSeatMapUseCase: GetSeatMapUseCase(seatRepository),
-        changeSeatUseCase: ChangeSeatUseCase(seatRepository),
-        getBaggageOptionsUseCase: GetBaggageOptionsUseCase(baggageRepository),
-        purchaseBaggageUseCase: PurchaseBaggageUseCase(baggageRepository),
-        getAirportDetailsUseCase: GetAirportDetailsUseCase(airportRepository),
-        escalateToAgentUseCase: EscalateToAgentUseCase(agentRepository),
-        searchFlightsUseCase: SearchFlightsUseCase(flightRepository),
-        bookFlightUseCase: BookFlightUseCase(flightRepository),
-        clearChatHistoryUseCase: ClearChatHistoryUseCase(historyRepository),
-        saveChatMessageUseCase: SaveChatMessageUseCase(historyRepository),
+      return assembleViewModel(
         voiceService: voice,
         voiceNarrator: narrator,
         audioCuePlayer: cues,
@@ -845,7 +1070,65 @@ void main() {
       vm.dispose();
     });
 
-    test('talkback uses a longer silence window before ending listen', () async {
+    test('a repeated miss stops repeating the same apology', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      await vm.startVoiceInput();
+      await pumpEventQueue();
+      voice.emitListeningEnded();
+      await pumpEventQueue();
+      expect(vm.state.messages.last.text, "Sorry, I didn't catch that.");
+
+      await vm.startVoiceInput();
+      await pumpEventQueue();
+      voice.emitListeningEnded();
+      await pumpEventQueue();
+      expect(vm.state.messages.last.text, contains('still not hearing anything'));
+
+      // Third time it stays quiet rather than apologizing at someone it
+      // evidently cannot hear.
+      final messageCount = vm.state.messages.length;
+      await vm.startVoiceInput();
+      await pumpEventQueue();
+      voice.emitListeningEnded();
+      await pumpEventQueue();
+      expect(vm.state.messages, hasLength(messageCount));
+      vm.dispose();
+    });
+
+    test('a broken recognizer is reported as a microphone problem', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      await vm.startVoiceInput();
+      await pumpEventQueue();
+      voice.emitListeningEnded(reason: VoiceListenEndReason.recognizerFailed);
+      await pumpEventQueue();
+
+      expect(vm.state.messages.last.text, contains('microphone'));
+      expect(
+        vm.state.messages.last.text,
+        isNot("Sorry, I didn't catch that."),
+        reason: 'an unavailable mic is not the passenger mumbling',
+      );
+      vm.dispose();
+    });
+
+    test('a recognizer that will not start says so instead of apologizing', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      voice.startSucceeds = false;
+      await vm.startVoiceInput();
+      await pumpEventQueue();
+
+      expect(vm.state.status, isNot(ChatStatus.listening));
+      expect(vm.state.messages.last.text, contains('microphone'));
+      vm.dispose();
+    });
+
+    test('talkback waits 5 seconds for the passenger to start talking', () async {
       final vm = buildViewModel();
       await pumpEventQueue();
       expect(vm.state.isVoiceOutputEnabled, isTrue);
@@ -853,7 +1136,7 @@ void main() {
       await vm.startVoiceInput();
       await pumpEventQueue();
 
-      expect(voice.lastPauseFor, const Duration(seconds: 5));
+      expect(voice.lastPauseFor, const Duration(seconds: 3));
       expect(voice.lastListenFor, const Duration(seconds: 30));
       vm.dispose();
     });
@@ -997,6 +1280,7 @@ void main() {
     test('composer dictate silence ends quietly without an apology', () async {
       final vm = buildViewModel();
       await pumpEventQueue();
+
       final messageCount = vm.state.messages.length;
 
       await vm.startVoiceInput(mode: VoiceInputMode.dictate);
@@ -1007,6 +1291,228 @@ void main() {
 
       expect(vm.state.status, isNot(ChatStatus.listening));
       expect(vm.state.messages, hasLength(messageCount));
+      vm.dispose();
+    });
+
+    test('a pause after real words ends the turn without waiting out the silence window',
+        () async {
+      when(() => chatRepository.classifyIntent(any())).thenAnswer(
+        (_) async =>
+            const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
+      );
+
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      await vm.startVoiceInput();
+      await pumpEventQueue();
+
+      // Partials only: the recognizer is still holding its own 3 second
+      // window open, waiting to be sure the passenger is finished.
+      voice.emitResult('I want a window seat', isFinal: false);
+      await pumpEventQueue();
+      expect(vm.state.status, ChatStatus.listening);
+
+      await Future<void>.delayed(const Duration(milliseconds: 2300));
+
+      expect(vm.state.status, isNot(ChatStatus.listening));
+      expect(
+        vm.state.messages.where((m) => m.role == ChatRole.user).map((m) => m.text),
+        contains('I want a window seat'),
+      );
+      expect(voice.stopListeningCount, greaterThan(0));
+      vm.dispose();
+    });
+
+    test('a card tap while listening shuts the microphone before the reply is spoken',
+        () async {
+      final booking = Booking(
+        pnr: 'TB123456',
+        passengerName: 'Joe Traveler',
+        flight: Flight(
+          flightNumber: 'UA482',
+          origin: 'EWR',
+          destination: 'ORD',
+          status: FlightStatus.scheduled,
+          scheduledDeparture: DateTime(2026, 1, 2, 6, 45),
+        ),
+      );
+      when(
+        () => flightRepository.bookFlight(
+          offerId: any(named: 'offerId'),
+          passengerName: any(named: 'passengerName'),
+        ),
+      ).thenAnswer((_) async => Result.success(booking));
+      when(() => seatRepository.getSeatMap(any())).thenAnswer(
+        (_) async => const Result.success(SeatMap(flightNumber: 'UA482', rows: 1, seats: [])),
+      );
+
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      await vm.startVoiceInput();
+      await pumpEventQueue();
+      expect(vm.state.status, ChatStatus.listening);
+
+      // The passenger answers by tapping the card instead of speaking.
+      await vm.selectFlightOffer('UA482');
+      await pumpEventQueue();
+
+      expect(narrator.utterances, isNotEmpty, reason: 'the reply is spoken');
+      expect(vm.state.status, isNot(ChatStatus.listening));
+      expect(voice.stopListeningCount, greaterThan(0));
+
+      // Anything the recognizer delivers from here is the assistant's own
+      // voice coming back off the speaker, and must not be answered.
+      final messageCount = vm.state.messages.length;
+      voice.emitResult('flight U A 4 8 2 is reserved now pick your seat');
+      await pumpEventQueue();
+      voice.emitListeningEnded();
+      await pumpEventQueue();
+
+      expect(vm.state.messages, hasLength(messageCount));
+      expect(vm.state.messages.where((m) => m.role == ChatRole.user), isEmpty);
+      expect(
+        vm.state.messages.where((m) => m.text == "Sorry, I didn't catch that."),
+        isEmpty,
+        reason: 'the session was abandoned deliberately, not missed',
+      );
+      vm.dispose();
+    });
+  });
+
+  group('hands-free handoff', () {
+    late _ControllableVoiceService voice;
+    late _PhasedNarrator phased;
+
+    ChatViewModel buildViewModel() {
+      voice = _ControllableVoiceService();
+      phased = _PhasedNarrator(voice);
+      cues = _RecordingCuePlayer();
+
+      return assembleViewModel(
+        voiceService: voice,
+        voiceNarrator: phased,
+        audioCuePlayer: cues,
+        bookingSessionStore: BookingSessionStore(),
+        talkBackPreferenceStore: _FakeTalkBackStore(),
+      );
+    }
+
+    /// Runs a full assistant turn through the narrator, ending on the idle
+    /// edge that means the passenger has heard all of it.
+    Future<void> speakATurn(ChatViewModel vm) async {
+      when(() => chatRepository.classifyIntent(any())).thenAnswer(
+        (_) async =>
+            const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
+      );
+      await vm.sendMessage('something I need help with');
+      await pumpEventQueue();
+      expect(phased.utterances, isNotEmpty, reason: 'the turn has to be spoken to hand off');
+
+      phased.emit(NarrationPhase.speaking);
+      await pumpEventQueue();
+      phased.emit(NarrationPhase.idle);
+      await pumpEventQueue();
+    }
+
+    /// Long enough for the handoff delay plus the cue and listen calls.
+    Future<void> waitForHandoff() =>
+        Future<void>.delayed(const Duration(milliseconds: 700));
+
+    test('the microphone opens on its own once the assistant stops speaking', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      await speakATurn(vm);
+      expect(vm.state.status, isNot(ChatStatus.listening), reason: 'not instantly — a beat first');
+
+      await waitForHandoff();
+
+      expect(vm.state.status, ChatStatus.listening);
+      expect(cues.played, contains(AudioCue.listeningStart));
+      expect(voice.lastPauseFor, const Duration(seconds: 3));
+      vm.dispose();
+    });
+
+    test('a hands-free microphone that hears nothing closes without apologizing', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      await speakATurn(vm);
+      await waitForHandoff();
+      expect(vm.state.status, ChatStatus.listening);
+
+      final messageCount = vm.state.messages.length;
+      voice.emitListeningEnded();
+      await pumpEventQueue();
+
+      expect(vm.state.status, isNot(ChatStatus.listening));
+      expect(
+        vm.state.messages,
+        hasLength(messageCount),
+        reason: 'nobody asked for this microphone, so silence is not a miss',
+      );
+      vm.dispose();
+    });
+
+    test('cutting the assistant off is not answered with an open microphone', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      when(() => chatRepository.classifyIntent(any())).thenAnswer(
+        (_) async =>
+            const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
+      );
+      await vm.sendMessage('something I need help with');
+      await pumpEventQueue();
+      phased.emit(NarrationPhase.speaking);
+      await pumpEventQueue();
+
+      await vm.stopSpeaking();
+      await waitForHandoff();
+
+      expect(vm.state.status, isNot(ChatStatus.listening));
+      vm.dispose();
+    });
+
+    test('the microphone stays shut while the passenger is typing', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      vm.setHandsFreeEnabled(false);
+      await speakATurn(vm);
+      await waitForHandoff();
+
+      expect(vm.state.status, isNot(ChatStatus.listening));
+
+      // Back to the orb, and the next turn hands the microphone over again.
+      vm.setHandsFreeEnabled(true);
+      await speakATurn(vm);
+      await waitForHandoff();
+
+      expect(vm.state.status, ChatStatus.listening);
+      vm.dispose();
+    });
+
+    test('talkback off means no microphone of our own accord', () async {
+      final vm = buildViewModel();
+      await pumpEventQueue();
+
+      await vm.toggleVoiceOutput();
+      await pumpEventQueue();
+      expect(vm.state.isVoiceOutputEnabled, isFalse);
+
+      when(() => chatRepository.classifyIntent(any())).thenAnswer(
+        (_) async =>
+            const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
+      );
+      await vm.sendMessage('something I need help with');
+      await pumpEventQueue();
+      phased.emit(NarrationPhase.idle);
+      await waitForHandoff();
+
+      expect(vm.state.status, isNot(ChatStatus.listening));
       vm.dispose();
     });
   });

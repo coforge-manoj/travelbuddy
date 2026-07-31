@@ -26,6 +26,7 @@ class ChatMessage extends Equatable {
     this.text = '',
     this.payload,
     this.isStreaming = false,
+    this.isInteractive = true,
   });
 
   final String id;
@@ -44,10 +45,16 @@ class ChatMessage extends Equatable {
 
   final bool isStreaming;
 
+  /// Whether the passenger can still change a choice on this card. Set to
+  /// false once the selection is confirmed so scrollback cannot re-pick a
+  /// flight, seat, or baggage option that has already been committed.
+  final bool isInteractive;
+
   ChatMessage copyWith({
     String? text,
     Object? payload,
     bool? isStreaming,
+    bool? isInteractive,
   }) {
     return ChatMessage(
       id: id,
@@ -57,9 +64,11 @@ class ChatMessage extends Equatable {
       text: text ?? this.text,
       payload: payload ?? this.payload,
       isStreaming: isStreaming ?? this.isStreaming,
+      isInteractive: isInteractive ?? this.isInteractive,
     );
   }
 
   @override
-  List<Object?> get props => [id, role, type, timestamp, text, payload, isStreaming];
+  List<Object?> get props =>
+      [id, role, type, timestamp, text, payload, isStreaming, isInteractive];
 }

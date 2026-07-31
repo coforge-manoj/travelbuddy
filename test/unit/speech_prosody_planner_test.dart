@@ -20,11 +20,17 @@ void main() {
       ]);
     });
 
-    test('questions get a lifted pitch and slightly faster rate', () {
+    test('questions stay one segment with a light pitch nudge', () {
       final segment = SpeechProsodyPlanner.plan('Would you like a window seat?').single;
 
       expect(segment.pitch, SpeechProsodyPlanner.questionPitch);
       expect(segment.rate, SpeechProsodyPlanner.questionRate);
+    });
+
+    test('interrogatives without a question mark still get question prosody', () {
+      final segment = SpeechProsodyPlanner.plan('Shall I go ahead and book that.').single;
+
+      expect(segment.pitch, SpeechProsodyPlanner.questionPitch);
     });
 
     test('soft apology openers get a lower pitch and slower rate', () {
@@ -60,7 +66,6 @@ void main() {
       ).single;
 
       expect(segment.pitch, SpeechProsodyPlanner.questionPitch);
-      expect(segment.rate, SpeechProsodyPlanner.questionRate);
     });
 
     test('a mixed turn gets per-sentence styles', () {

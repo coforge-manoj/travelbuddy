@@ -248,6 +248,12 @@ class MockBackendServer {
   // ---------------------------------------------------------------------
   IntentResult classifyIntent(String utterance) {
     final lower = utterance.toLowerCase();
+    // Checked ahead of the booking keywords: "book me a window seat" is a seat
+    // request that happens to say "book", and routing it to a flight search
+    // leaves the passenger staring at fares they did not ask for.
+    if (lower.contains('seat')) {
+      return IntentResult(type: IntentType.seatSelection, confidence: 0.92,originalMessage: utterance);
+    }
     if (lower.contains('book') ||
         lower.contains('search flight') ||
         lower.contains('find a flight') ||
@@ -259,9 +265,6 @@ class MockBackendServer {
         confidence: 0.93,
         originalMessage: utterance,
       );
-    }
-    if (lower.contains('seat')) {
-      return IntentResult(type: IntentType.seatSelection, confidence: 0.92,originalMessage: utterance);
     }
     if (lower.contains('baggage') || lower.contains('bag') || lower.contains('kg')) {
       return  IntentResult(type: IntentType.addBaggage, confidence: 0.88,originalMessage: utterance);

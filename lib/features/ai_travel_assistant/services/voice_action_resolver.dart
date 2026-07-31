@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/display_text_formatter.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/speech_text_formatter.dart';
 
 /// What the passenger is currently being asked to choose from. Held on the
@@ -51,6 +52,10 @@ sealed class VoiceAction extends VoiceOutcome {
   /// The read-back question, spoken before a gated action runs. States the
   /// price so nobody agrees to a charge they didn't hear.
   String get confirmationPrompt => '';
+
+  /// On-screen counterpart to [confirmationPrompt]. Uses readable times and
+  /// codes ("5:05 AM", "B6935") rather than speech spelling ("5 oh 5").
+  String get confirmationDisplayText => confirmationPrompt;
 }
 
 class SelectOfferAction extends VoiceAction {
@@ -66,6 +71,13 @@ class SelectOfferAction extends VoiceAction {
       '${offer.airline}, flight ${SpeechTextFormatter.flightNumber(offer.flightNumber)}, '
       'departing ${SpeechTextFormatter.time(offer.departureTime)}, '
       '${SpeechTextFormatter.price(offer.price, offer.currency)}. '
+      'Would you like me to book it for you?';
+
+  @override
+  String get confirmationDisplayText =>
+      '${offer.airline}, flight ${DisplayTextFormatter.flightNumber(offer.flightNumber)}, '
+      'departing ${DisplayTextFormatter.time(offer.departureTime)}, '
+      '${DisplayTextFormatter.price(offer.price, offer.currency)}. '
       'Would you like me to book it for you?';
 
   @override
@@ -86,6 +98,12 @@ class SelectSeatAction extends VoiceAction {
   @override
   String get confirmationPrompt => 'Seat ${SpeechTextFormatter.seat(seat.seatNumber)} costs an '
       'extra ${SpeechTextFormatter.price(seat.priceDelta, currency)}. '
+      'Would you like me to reserve it for you?';
+
+  @override
+  String get confirmationDisplayText =>
+      'Seat ${DisplayTextFormatter.seat(seat.seatNumber)} costs an '
+      'extra ${DisplayTextFormatter.price(seat.priceDelta, currency)}. '
       'Would you like me to reserve it for you?';
 
   @override
@@ -111,6 +129,12 @@ class SelectBaggageAction extends VoiceAction {
   String get confirmationPrompt =>
       '${_number(option.extraWeightKg)} extra kilos for '
       '${SpeechTextFormatter.price(option.price, option.currency)}. '
+      'Would you like me to add that for you?';
+
+  @override
+  String get confirmationDisplayText =>
+      '${_number(option.extraWeightKg)} extra kilos for '
+      '${DisplayTextFormatter.price(option.price, option.currency)}. '
       'Would you like me to add that for you?';
 
   @override
@@ -142,22 +166,29 @@ class CancelAction extends VoiceAction {
 
 /// A clarifying question to ask instead of guessing. When [suggestion] is
 /// set, a following "yes" should run it.
+///
+/// [question] is the on-screen wording; [spokenQuestion] is what TTS reads
+/// when speech needs a different spelling (times, codes).
 class VoiceAmbiguity extends VoiceOutcome {
-  const VoiceAmbiguity(this.question, {this.suggestion});
+  const VoiceAmbiguity(this.question, {this.suggestion, this.spokenQuestion});
 
   final String question;
+  final String? spokenQuestion;
   final VoiceAction? suggestion;
 
+  String get speechText => spokenQuestion ?? question;
+
   @override
-  List<Object?> get props => [question, suggestion];
+  List<Object?> get props => [question, spokenQuestion, suggestion];
 }
 
 /// Maps spoken phrases onto the actions the chat already supports.
 ///
-/// Deliberately rule-based rather than model-driven: the phrases that matter
-/// here are a small, closed set ("the cheapest one", "window", "ten kilos",
-/// "yes"), and rules are predictable enough to trust in front of a payment
-/// step. An LLM parser can slot in behind the same interface later.
+/// Closed-set matching for the phrases that matter most ("the cheapest one",
+/// "window", "ten kilos", "yes") — predictable enough to trust in front of a
+/// payment step. Natural language the rules miss is handled by
+/// [HybridVoiceActionParser], which asks an LLM and rebinds the answer onto
+/// this same [VoiceOutcome] hierarchy.
 class VoiceActionResolver {
   const VoiceActionResolver._();
 
@@ -230,8 +261,11 @@ class VoiceActionResolver {
     if (airlineMatches.length > 1) {
       return VoiceAmbiguity(
         'I have ${airlineMatches.length} ${airlineMatches.first.airline} flights. '
-        'The ${SpeechTextFormatter.time(airlineMatches.first.departureTime)} one, '
-        'or the ${SpeechTextFormatter.time(airlineMatches.last.departureTime)} one?',
+        'The ${DisplayTextFormatter.time(airlineMatches.first.departureTime)} one, '
+        'or the ${DisplayTextFormatter.time(airlineMatches.last.departureTime)} one?',
+        spokenQuestion: 'I have ${airlineMatches.length} ${airlineMatches.first.airline} flights. '
+            'The ${SpeechTextFormatter.time(airlineMatches.first.departureTime)} one, '
+            'or the ${SpeechTextFormatter.time(airlineMatches.last.departureTime)} one?',
       );
     }
 
@@ -249,15 +283,38 @@ class VoiceActionResolver {
     return null;
   }
 
-  /// Matches on the distinctive words of an airline name, so "united" hits
-  /// "United Airlines" but the shared word "airlines" matches nothing.
+  /// Matches on the distinctive parts of an airline name.
+  ///
+  /// Handles spaced STT forms of compound brands ("jet blue" for "JetBlue")
+  /// via a compact compare, and CamelCase splits so both "jet" and "blue"
+  /// count. Shared words like "airlines" still match nothing on their own.
   static bool _mentionsAirline(String text, String airline) {
     const generic = {'airlines', 'airline', 'air', 'lines', 'the'};
-    final tokens = airline
-        .toLowerCase()
-        .split(RegExp(r'\s+'))
-        .where((token) => token.length > 2 && !generic.contains(token));
-    return tokens.any((token) => _containsWord(text, token));
+
+    final compactAirline = airline.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final compactText = text.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (compactAirline.length >= 4 &&
+        !generic.contains(compactAirline) &&
+        compactText.contains(compactAirline)) {
+      return true;
+    }
+
+    final spaced = airline
+        .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (match) => '${match[1]} ${match[2]}')
+        .replaceAllMapped(
+          RegExp(r'([A-Z]+)([A-Z][a-z])'),
+          (match) => '${match[1]} ${match[2]}',
+        )
+        .toLowerCase();
+    final tokens = spaced
+        .split(RegExp(r'[\s-]+'))
+        .where((token) => token.length > 2 && !generic.contains(token))
+        .toList();
+    if (tokens.isEmpty) return false;
+    if (tokens.length >= 2) {
+      return tokens.every((token) => _containsWord(text, token));
+    }
+    return _containsWord(text, tokens.single);
   }
 
   // ---------------------------------------------------------------------
@@ -271,30 +328,35 @@ class VoiceActionResolver {
 
     final available = seatMap.seats.where((seat) => seat.isAvailable).toList();
 
-    final explicit = RegExp(r'\b(\d{1,2})\s*([a-f])\b').firstMatch(text);
-    if (explicit != null) {
-      final requested = '${explicit.group(1)}${explicit.group(2)!.toUpperCase()}';
+    final requested = _matchSeatNumber(text);
+    if (requested != null) {
       final seat = seatMap.seats
           .where((candidate) => candidate.seatNumber.toUpperCase() == requested)
           .firstOrNull;
 
       if (seat == null) {
         return VoiceAmbiguity(
-          "I don't see seat ${SpeechTextFormatter.seat(requested)} on this flight. "
+          "I don't see seat ${DisplayTextFormatter.seat(requested)} on this flight. "
           'Which seat would you like?',
+          spokenQuestion: "I don't see seat ${SpeechTextFormatter.seat(requested)} on this flight. "
+              'Which seat would you like?',
         );
       }
       if (!seat.isAvailable) {
         final alternative = _nearestAlternative(available, seat);
         if (alternative == null) {
           return VoiceAmbiguity(
-            'Seat ${SpeechTextFormatter.seat(requested)} is taken, and I have '
+            'Seat ${DisplayTextFormatter.seat(requested)} is taken, and I have '
             'nothing else free. Would you like me to check another flight?',
+            spokenQuestion: 'Seat ${SpeechTextFormatter.seat(requested)} is taken, and I have '
+                'nothing else free. Would you like me to check another flight?',
           );
         }
         return VoiceAmbiguity(
-          'Seat ${SpeechTextFormatter.seat(requested)} is taken. '
-          '${SpeechTextFormatter.seat(alternative.seatNumber)} is free. Want that instead?',
+          'Seat ${DisplayTextFormatter.seat(requested)} is taken. '
+          '${DisplayTextFormatter.seat(alternative.seatNumber)} is free. Want that instead?',
+          spokenQuestion: 'Seat ${SpeechTextFormatter.seat(requested)} is taken. '
+              '${SpeechTextFormatter.seat(alternative.seatNumber)} is free. Want that instead?',
           suggestion: SelectSeatAction(alternative, currency: seatMap.currency),
         );
       }
@@ -320,7 +382,87 @@ class VoiceActionResolver {
       return SelectSeatAction(_cheapest(available), currency: seatMap.currency);
     }
 
+    // "I'd like to pick a seat" while the map is already up names nothing to
+    // act on. Asking which one keeps the passenger on this card — falling
+    // through would re-classify it as a fresh seat-selection intent and stack
+    // a second, identical seat map underneath the first.
+    if (_isBareSeatRequest(text)) {
+      return const VoiceAmbiguity(
+        'Which seat would you like? You can say a seat like 12A, or just '
+        'window or aisle.',
+      );
+    }
+
     return null;
+  }
+
+  /// A seat named outright, as "12A", "12 a", "twelve a", or
+  /// "row twelve seat a" — normalized to the map's own spelling ("12A").
+  ///
+  /// Word-form numbers are not a nicety: recognizers routinely transcribe a
+  /// short spoken row as a word ("twelve a"), and a digits-only match makes
+  /// the assistant deaf to the most natural way to say a seat out loud.
+  static String? _matchSeatNumber(String text) {
+    final digits = _digitizeRows(text);
+
+    final adjacent = RegExp(r'\b(\d{1,2})\s*([a-f])\b').firstMatch(digits);
+    if (adjacent != null) {
+      return '${adjacent.group(1)}${adjacent.group(2)!.toUpperCase()}';
+    }
+
+    // "row 12, seat A" — the same choice with the labels spoken out.
+    final spelled =
+        RegExp(r'\brow\s+(\d{1,2})\b.{0,12}?\bseat\s+([a-f])\b').firstMatch(digits);
+    if (spelled != null) {
+      return '${spelled.group(1)}${spelled.group(2)!.toUpperCase()}';
+    }
+
+    return null;
+  }
+
+  /// Rewrites spelled-out row numbers as digits so one seat pattern covers
+  /// both transcriptions. Only touches words immediately before a seat
+  /// letter or after "row", so "one" in "the first one" stays a word.
+  static String _digitizeRows(String text) {
+    const units = <String, int>{
+      'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6,
+      'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11,
+      'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+      'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19,
+      'twenty': 20, 'thirty': 30, 'forty': 40,
+    };
+
+    // Longest first so "twenty two" never resolves as a bare "twenty".
+    final compound = RegExp(
+      r'\b(twenty|thirty|forty)[\s-](one|two|three|four|five|six|seven|eight|nine)\b',
+    );
+    var result = text.replaceAllMapped(compound, (match) {
+      return '${units[match.group(1)]! + units[match.group(2)]!}';
+    });
+
+    final single = RegExp('\\b(${units.keys.join('|')})\\b');
+    result = result.replaceAllMapped(single, (match) {
+      final value = units[match.group(1)]!;
+      final rest = result.substring(match.end);
+      final before = result.substring(0, match.start);
+      // Only where a row could plausibly be meant: right before a seat
+      // letter, or right after the word "row".
+      final followedByLetter = RegExp(r'^\s*[a-f]\b').hasMatch(rest);
+      final followsRow = RegExp(r'\brow\s+$').hasMatch(before);
+      return followedByLetter || followsRow ? '$value' : match.group(0)!;
+    });
+
+    return result;
+  }
+
+  /// True for "let me pick a seat" and friends: a seat is asked for, but no
+  /// row, letter, or preference is named.
+  static bool _isBareSeatRequest(String text) {
+    if (!_containsWord(text, 'seat') && !_containsWord(text, 'seats')) return false;
+    return _containsAny(text, [
+      'select', 'choose', 'choosing', 'pick', 'picking', 'reserve', 'book',
+      'change', 'assign', 'want', 'need', 'like', 'selection',
+    ]);
   }
 
   static SeatType? _preferredSeatType(String text) {
@@ -461,7 +603,12 @@ class VoiceActionResolver {
 
   static bool _matchesAny(String text, Set<String> phrases) {
     if (phrases.contains(text)) return true;
-    return phrases.any((phrase) => phrase.contains(' ') && text.contains(phrase));
+    return phrases.any((phrase) {
+      if (phrase.contains(' ')) return text.contains(phrase);
+      // "yes please" / "confirm that" still count; mid-sentence "no" in
+      // "I have no preference" must not.
+      return RegExp('^${RegExp.escape(phrase)}(?:\\s+\\w+){0,3}\$').hasMatch(text);
+    });
   }
 
   static bool _containsAny(String text, List<String> phrases) => phrases.any(

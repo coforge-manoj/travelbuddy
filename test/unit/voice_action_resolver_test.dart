@@ -45,6 +45,11 @@ void main() {
       );
     });
 
+    test('JetBlue matches whether spoken as one word or two', () {
+      expect((resolveOffers('book jetblue')! as SelectOfferAction).offer.id, 'B6935');
+      expect((resolveOffers('book jet blue')! as SelectOfferAction).offer.id, 'B6935');
+    });
+
     test('an airline name picks that flight', () {
       expect((resolveOffers('book delta')! as SelectOfferAction).offer.id, 'DL2071');
       expect((resolveOffers('JetBlue please')! as SelectOfferAction).offer.id, 'B6935');
@@ -67,7 +72,8 @@ void main() {
 
       expect(outcome, isA<VoiceAmbiguity>());
       expect((outcome! as VoiceAmbiguity).question, contains('2 United Airlines flights'));
-      expect((outcome as VoiceAmbiguity).question, contains('6 30 in the morning'));
+      expect((outcome as VoiceAmbiguity).question, contains('6:30 AM'));
+      expect(outcome.speechText, contains('6 30 in the morning'));
     });
 
     test('ordinals index the list as rendered', () {
@@ -84,6 +90,10 @@ void main() {
       expect(
         (resolveOffers('the cheapest one')! as VoiceAction).confirmationPrompt,
         contains('165 dollars'),
+      );
+      expect(
+        (resolveOffers('the cheapest one')! as VoiceAction).confirmationDisplayText,
+        contains(r'$165'),
       );
     });
 
@@ -142,15 +152,17 @@ void main() {
     test('a taken seat is refused with a concrete alternative to accept', () {
       final outcome = resolveSeat('14A')! as VoiceAmbiguity;
 
-      expect(outcome.question, contains('Seat 14 A is taken'));
-      expect(outcome.question, contains('14 C is free'));
+      expect(outcome.question, contains('Seat 14A is taken'));
+      expect(outcome.question, contains('14C is free'));
+      expect(outcome.speechText, contains('Seat 14 A is taken'));
       expect((outcome.suggestion! as SelectSeatAction).seat.seatNumber, '14C');
     });
 
     test('a seat that is not on the aircraft is queried, not booked', () {
       final outcome = resolveSeat('seat 40 F')! as VoiceAmbiguity;
 
-      expect(outcome.question, contains("I don't see seat 40 F"));
+      expect(outcome.question, contains("I don't see seat 40F"));
+      expect(outcome.speechText, contains("I don't see seat 40 F"));
       expect(outcome.suggestion, isNull);
     });
 
@@ -165,6 +177,33 @@ void main() {
       final paid = resolveSeat('window please')! as SelectSeatAction;
       expect(paid.requiresConfirmation, isTrue);
       expect(paid.confirmationPrompt, contains('15 dollars'));
+    });
+
+    test('a seat spoken as words is selected, same as digits', () {
+      // Recognizers routinely transcribe a short spoken row as a word, so a
+      // digits-only match makes the assistant deaf to the most natural way
+      // to say a seat out loud.
+      expect((resolveSeat('fourteen C')! as SelectSeatAction).seat.seatNumber, '14C');
+      expect((resolveSeat('seat fifteen b')! as SelectSeatAction).seat.seatNumber, '15B');
+      expect((resolveSeat('row fifteen seat A')! as SelectSeatAction).seat.seatNumber, '15A');
+      expect((resolveSeat('row 14, seat C')! as SelectSeatAction).seat.seatNumber, '14C');
+    });
+
+    test('word numbers outside a seat position are left alone', () {
+      // "one" here is an ordinal about the card, not row 1 — it must not
+      // become a seat.
+      expect(resolveSeat('tell me about the first one'), isNull);
+    });
+
+    test('asking for a seat without naming one is answered, not ignored', () {
+      // Falling through would re-classify this as a fresh seat-selection
+      // intent and stack a second, identical seat map under the first.
+      final outcome = resolveSeat('I want to select a seat')! as VoiceAmbiguity;
+      expect(outcome.question, contains('Which seat would you like?'));
+      expect(outcome.suggestion, isNull);
+
+      expect(resolveSeat('book me a seat'), isA<VoiceAmbiguity>());
+      expect(resolveSeat('let me pick a seat'), isA<VoiceAmbiguity>());
     });
 
     test('skipping is recognized', () {
@@ -235,7 +274,16 @@ void main() {
     });
 
     test('various affirmatives are accepted', () {
-      for (final phrase in ['yes', 'yep', 'go ahead', 'book it', 'sounds good', 'confirm']) {
+      for (final phrase in [
+        'yes',
+        'yep',
+        'go ahead',
+        'book it',
+        'sounds good',
+        'confirm',
+        'yes please',
+        'confirm the booking',
+      ]) {
         expect(
           VoiceActionResolver.resolve(
             transcript: phrase,

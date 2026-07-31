@@ -8,9 +8,24 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 /// Lists bookable flight search results; tapping "Select" starts booking via
 /// [ChatViewModel.selectFlightOffer].
 class FlightOffersCard extends ConsumerStatefulWidget {
-  const FlightOffersCard({super.key, required this.offers});
+  const FlightOffersCard({
+    super.key,
+    required this.offers,
+    this.isInteractive = true,
+    this.confirmedOfferId,
+    this.hasPendingBooking = false,
+  });
 
   final List<FlightOffer> offers;
+
+  /// False once a flight from this (or a prior) offers card was booked.
+  final bool isInteractive;
+
+  /// Offer id already booked — shown as "Selected" on locked cards.
+  final String? confirmedOfferId;
+
+  /// True while the guided booking flow is underway.
+  final bool hasPendingBooking;
 
   @override
   ConsumerState<FlightOffersCard> createState() => _FlightOffersCardState();
@@ -20,7 +35,9 @@ class _FlightOffersCardState extends ConsumerState<FlightOffersCard> {
   String? _selectingOfferId;
 
   Future<void> _select(String offerId) async {
-    if (_selectingOfferId != null) return;
+    if (!widget.isInteractive || widget.hasPendingBooking || _selectingOfferId != null) {
+      return;
+    }
     setState(() => _selectingOfferId = offerId);
     await ref.read(chatViewModelProvider.notifier).selectFlightOffer(offerId);
   }
@@ -29,6 +46,9 @@ class _FlightOffersCardState extends ConsumerState<FlightOffersCard> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final timeFormat = DateFormat.Hm();
+    // Also treat as locked while a guided booking is already underway so a
+    // scrollback or duplicate offers card cannot start a second booking.
+    final locked = !widget.isInteractive || widget.hasPendingBooking;
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -57,8 +77,9 @@ class _FlightOffersCardState extends ConsumerState<FlightOffersCard> {
               _FlightOfferRow(
                 offer: offer,
                 timeFormat: timeFormat,
-                isBusy: _selectingOfferId != null,
+                isBusy: locked || _selectingOfferId != null,
                 isSelecting: _selectingOfferId == offer.id,
+                isSelected: locked && widget.confirmedOfferId == offer.id,
                 onSelect: () => _select(offer.id),
               ),
               if (offer != widget.offers.last)
@@ -80,6 +101,7 @@ class _FlightOfferRow extends StatelessWidget {
     required this.timeFormat,
     required this.isBusy,
     required this.isSelecting,
+    required this.isSelected,
     required this.onSelect,
   });
 
@@ -87,6 +109,7 @@ class _FlightOfferRow extends StatelessWidget {
   final DateFormat timeFormat;
   final bool isBusy;
   final bool isSelecting;
+  final bool isSelected;
   final VoidCallback onSelect;
 
   @override
@@ -124,17 +147,26 @@ class _FlightOfferRow extends StatelessWidget {
         const SizedBox(width: 12),
         SizedBox(
           width: 92,
-          child: OutlinedButton(
-            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
-            onPressed: isBusy ? null : onSelect,
-            child: isSelecting
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Select'),
-          ),
+          child: isSelected
+              ? Text(
+                  'Selected',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                )
+              : OutlinedButton(
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                  onPressed: isBusy ? null : onSelect,
+                  child: isSelecting
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Select'),
+                ),
         ),
       ],
     );

@@ -16,7 +16,12 @@ enum VoiceOrbMode {
   static VoiceOrbMode from(ChatStatus status) => switch (status) {
         ChatStatus.listening => VoiceOrbMode.listening,
         ChatStatus.speaking => VoiceOrbMode.speaking,
-        ChatStatus.sendingMessage || ChatStatus.loadingHistory => VoiceOrbMode.busy,
+        // Synthesis is still in flight, so this stays the working animation:
+        // the speaking orb over silence looks like a hung app.
+        ChatStatus.sendingMessage ||
+        ChatStatus.loadingHistory ||
+        ChatStatus.preparingSpeech =>
+          VoiceOrbMode.busy,
         _ => VoiceOrbMode.idle,
       };
 }

@@ -32,6 +32,7 @@ class _FakePhrasingRepository implements VoicePhrasingRepository {
   Future<Result<String>> phrase({
     required SpokenDraft draft,
     List<String> recentlySpoken = const [],
+    bool forDisplay = false,
   }) {
     lastRecentlySpoken = recentlySpoken;
     return _respond();

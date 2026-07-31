@@ -56,9 +56,11 @@ class SpokenDraft extends Equatable {
     required this.topic,
     required this.fallbackText,
     required this.clauses,
+    this.displayFallbackText,
     this.invitation = SpokenInvitation.none,
     this.tone = SpokenTone.neutral,
     this.mustInclude = const [],
+    this.displayMustInclude = const [],
   });
 
   final SpokenTopic topic;
@@ -67,6 +69,11 @@ class SpokenDraft extends Equatable {
   /// times out, fails, or comes back with the facts altered — so voice output
   /// degrades to the previous behaviour rather than to silence.
   final String fallbackText;
+
+  /// Readable on-screen counterpart to [fallbackText]. Uses normal times and
+  /// codes ("5:05 AM") rather than speech spelling. When null, the chat keeps
+  /// whatever caption it already has.
+  final String? displayFallbackText;
 
   /// The facts to convey, each a lower-case clause with no trailing period
   /// ("there are 3 flights from Newark to Chicago") so a phrasing can reorder
@@ -81,6 +88,21 @@ class SpokenDraft extends Equatable {
   /// code, a gate — not for anything the model should be free to leave out.
   final List<String> mustInclude;
 
+  /// Readable fragments that must survive in an on-screen caption phrasing.
+  final List<String> displayMustInclude;
+
+  /// Caption used when the message is first shown, before LLM polish lands.
+  String get captionText => displayFallbackText ?? fallbackText;
+
   @override
-  List<Object?> get props => [topic, fallbackText, clauses, invitation, tone, mustInclude];
+  List<Object?> get props => [
+        topic,
+        fallbackText,
+        displayFallbackText,
+        clauses,
+        invitation,
+        tone,
+        mustInclude,
+        displayMustInclude,
+      ];
 }

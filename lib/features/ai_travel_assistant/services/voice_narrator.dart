@@ -25,6 +25,23 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_
 ///
 /// After coalescing, text is split into [SpeechSegment]s so questions and
 /// soft leads get light pitch/rate changes instead of one flat reading.
+///
+/// How far along a turn is is reported as a [NarrationPhase] rather than a
+/// bare "speaking" flag, because the gap between the two is audible: wording
+/// and network synthesis both happen before the first sample plays.
+enum NarrationPhase {
+  /// Nothing queued, nothing playing.
+  idle,
+
+  /// The turn is committed but inaudible so far — its wording is being
+  /// chosen, or its audio is still being synthesized. UI should keep showing
+  /// a loader here, not a speaking indicator.
+  preparing,
+
+  /// Sound is actually coming out of the speaker.
+  speaking,
+}
+
 class VoiceNarrator {
   VoiceNarrator({
     required VoiceService voiceService,
@@ -47,7 +64,7 @@ class VoiceNarrator {
   final List<_PendingUtterance> _buffer = <_PendingUtterance>[];
   final Queue<SpeechSegment> _queue = Queue<SpeechSegment>();
   final Queue<String> _recentlySpoken = Queue<String>();
-  final _speakingController = StreamController<bool>.broadcast();
+  final _phaseController = StreamController<NarrationPhase>.broadcast();
 
   /// Batches still on their way to the speech queue. A batch dropped from this
   /// set has been cancelled and its resolved text is discarded.
@@ -57,7 +74,11 @@ class VoiceNarrator {
 
   Timer? _coalesceTimer;
   bool _draining = false;
-  bool _announcedSpeaking = false;
+
+  /// The generation the running drain loop belongs to, so a loop left over
+  /// from a cancelled turn can be told apart from the live one.
+  int _drainGeneration = -1;
+  NarrationPhase _phase = NarrationPhase.idle;
 
   /// When false (app backgrounded / not visible), [enqueue] is a no-op and
   /// any in-flight speech is discarded by [setSpeechAllowed].
@@ -67,13 +88,19 @@ class VoiceNarrator {
   /// work instead of carrying on with utterances the user just cancelled.
   int _generation = 0;
 
-  /// Emits `true` when narration starts and `false` once the queue has fully
-  /// drained. The `false` edge is the signal a proactive follow-up should
-  /// wait for — it means the passenger has actually heard the whole turn.
-  Stream<bool> get speakingChanges => _speakingController.stream;
+  /// Emits [NarrationPhase.preparing] when a turn is committed,
+  /// [NarrationPhase.speaking] once its audio is actually audible, and
+  /// [NarrationPhase.idle] when the queue has fully drained. The idle edge is
+  /// the signal a proactive follow-up should wait for — it means the
+  /// passenger has actually heard the whole turn.
+  Stream<NarrationPhase> get phaseChanges => _phaseController.stream;
 
-  bool get isBusy =>
-      _draining || _buffer.isNotEmpty || _queue.isNotEmpty || _liveBatches.isNotEmpty;
+  NarrationPhase get phase => _phase;
+
+  bool get isBusy => _draining || _hasPendingWork;
+
+  bool get _hasPendingWork =>
+      _buffer.isNotEmpty || _queue.isNotEmpty || _liveBatches.isNotEmpty;
 
   bool get isSpeechAllowed => _speechAllowed;
 
@@ -105,7 +132,7 @@ class VoiceNarrator {
 
   void _add(_PendingUtterance utterance) {
     _buffer.add(utterance);
-    _emitSpeaking(true);
+    _emitPhase(NarrationPhase.preparing);
 
     _coalesceTimer?.cancel();
     _coalesceTimer = Timer(_coalesceWindow, _flushBuffer);
@@ -121,7 +148,7 @@ class VoiceNarrator {
     _buffer.clear();
     _liveBatches.clear();
     _queue.clear();
-    _emitSpeaking(false);
+    _emitPhase(NarrationPhase.idle);
     try {
       await _voiceService.stopSpeaking();
     } catch (_) {
@@ -135,7 +162,7 @@ class VoiceNarrator {
     _buffer.clear();
     _liveBatches.clear();
     _queue.clear();
-    _speakingController.close();
+    _phaseController.close();
   }
 
   void _flushBuffer() {
@@ -151,10 +178,10 @@ class VoiceNarrator {
   }
 
   Future<void> _resolveAndQueue(int id, List<_PendingUtterance> batch) async {
-    // Cancelled while waiting its turn behind an earlier batch.
-    if (!_liveBatches.contains(id)) return;
-
     try {
+      // Cancelled while waiting its turn behind an earlier batch.
+      if (!_liveBatches.contains(id)) return;
+
       final texts = <String>[];
       for (final utterance in batch) {
         final text = await utterance.resolve(_phraser, recentlySpoken: _recentlySpoken.toList());
@@ -172,9 +199,12 @@ class VoiceNarrator {
       }
     } finally {
       _liveBatches.remove(id);
+      // Runs on every path, including the early returns above. A batch that
+      // resolved to nothing still has to hand back the `preparing` phase it
+      // claimed on enqueue, or the UI is left announcing a turn that will
+      // never make a sound.
+      unawaited(_drain());
     }
-
-    unawaited(_drain());
   }
 
   /// Keeps the tail of what the passenger has heard, so the phraser can vary
@@ -187,19 +217,39 @@ class VoiceNarrator {
   }
 
   Future<void> _drain() async {
-    if (_draining) return;
-    _draining = true;
+    // A loop belonging to a cancelled generation may still be unwinding the
+    // utterance it was interrupted on. It will never speak from this queue
+    // again — the generation check below sends it home — so the new turn
+    // starts draining now instead of waiting behind it and never running.
+    if (_draining && _drainGeneration == _generation) return;
     final generation = _generation;
+    _draining = true;
+    _drainGeneration = generation;
 
     try {
       while (_queue.isNotEmpty) {
         if (generation != _generation || !_speechAllowed) return;
         final next = _queue.removeFirst();
+        // Peeked before speaking so synthesis of the follow-on segment can
+        // start the moment this one becomes audible — otherwise every
+        // sentence break costs another network round trip of silence.
+        final upcoming = _queue.isEmpty ? null : _queue.first;
         try {
           await _voiceService.speak(
             next.text,
             pitch: next.pitch,
             rate: next.rate,
+            onAudible: () {
+              if (generation != _generation) return;
+              _emitPhase(NarrationPhase.speaking);
+              if (upcoming != null) {
+                _voiceService.prewarm(
+                  upcoming.text,
+                  pitch: upcoming.pitch,
+                  rate: upcoming.rate,
+                );
+              }
+            },
           );
         } catch (_) {
           // Voice output is a nice-to-have. A missing TTS engine or a
@@ -207,17 +257,25 @@ class VoiceNarrator {
         }
       }
     } finally {
-      _draining = false;
-      if (generation == _generation && _buffer.isEmpty && _liveBatches.isEmpty) {
-        _emitSpeaking(false);
+      // Only the loop that still owns the flag may clear it: a straggler from
+      // an earlier generation finishing late must not hand the live loop's
+      // turn back to the next caller.
+      if (_drainGeneration == generation) {
+        _draining = false;
+        if (!_hasPendingWork) _emitPhase(NarrationPhase.idle);
       }
     }
   }
 
-  void _emitSpeaking(bool value) {
-    if (_announcedSpeaking == value) return;
-    _announcedSpeaking = value;
-    if (!_speakingController.isClosed) _speakingController.add(value);
+  void _emitPhase(NarrationPhase phase) {
+    if (_phase == phase) return;
+    // An utterance appended mid-turn must not knock a live turn back to
+    // `preparing`: the previous sentence is still playing.
+    if (phase == NarrationPhase.preparing && _phase == NarrationPhase.speaking) {
+      return;
+    }
+    _phase = phase;
+    if (!_phaseController.isClosed) _phaseController.add(phase);
   }
 
   /// Joins fragments into one utterance, adding sentence breaks only where

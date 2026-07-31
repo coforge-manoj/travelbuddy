@@ -92,8 +92,17 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     if (!currentlyEnabled) {
       // Entering talkback always shows the orb first.
       setState(() => _preferTypingWhileTalkback = false);
+      viewModel.setHandsFreeEnabled(true);
     }
     await viewModel.toggleVoiceOutput();
+  }
+
+  /// Keeps the assistant's hands-free microphone in step with which input
+  /// surface is showing: it may open on its own behind the orb, never while
+  /// the passenger has the keyboard up.
+  void _setPreferTyping(ChatViewModel viewModel, bool preferTyping) {
+    setState(() => _preferTypingWhileTalkback = preferTyping);
+    viewModel.setHandsFreeEnabled(!preferTyping);
   }
 
   @override
@@ -115,7 +124,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
     final showVoiceBar = state.isVoiceOutputEnabled && !_preferTypingWhileTalkback;
     // Chip only when the orb is hidden (talkback off, or temporary typing).
-    final showSpeakingChip = state.isSpeaking && !showVoiceBar;
+    final showSpeakingChip = state.isNarrating && !showVoiceBar;
 
     return Scaffold(
       body: Column(
@@ -138,8 +147,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
                         final isRichCard = message.type != ChatMessageType.text &&
                             message.type != ChatMessageType.error;
                         return isRichCard
-                            ? RichCardWidget(message: message)
-                            : ChatBubble(message: message);
+                            ? RichCardWidget(key: ValueKey(message.id), message: message)
+                            : ChatBubble(key: ValueKey(message.id), message: message);
                       }
                       if (isTyping && index == state.messages.length) {
                         return const TypingIndicator();
@@ -148,14 +157,18 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
                     },
                   ),
           ),
-          if (showSpeakingChip) SpeakingIndicator(onStop: viewModel.stopSpeaking),
+          if (showSpeakingChip)
+            SpeakingIndicator(
+              onStop: viewModel.stopSpeaking,
+              preparing: state.status == ChatStatus.preparingSpeech,
+            ),
           if (showVoiceBar)
             VoiceStatusBar(
               status: state.status,
-              enabled: !state.isBusy || state.status == ChatStatus.speaking,
+              enabled: !state.isBusy || state.isNarrating,
               onOrbTap: () => _toggleMic(viewModel, state),
               onStopSpeaking: viewModel.stopSpeaking,
-              onPreferTyping: () => setState(() => _preferTypingWhileTalkback = true),
+              onPreferTyping: () => _setPreferTyping(viewModel, true),
             )
           else
             MessageComposer(
@@ -165,9 +178,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
               dictationText: state.dictationDraft,
               dictationRevision: state.dictationRevision,
               onReturnToVoice: () {
-                setState(() => _preferTypingWhileTalkback = false);
-                if (state.status != ChatStatus.listening &&
-                    state.status != ChatStatus.speaking) {
+                _setPreferTyping(viewModel, false);
+                if (state.status != ChatStatus.listening && !state.isNarrating) {
                   viewModel.startVoiceInput();
                 }
               },

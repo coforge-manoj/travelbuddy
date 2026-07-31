@@ -12,6 +12,7 @@ abstract interface class VoicePhrasingRepository {
   /// instead of restarting the conversation on every turn.
   Future<Result<String>> phrase({
     required SpokenDraft draft,
-    List<String> recentlySpoken,
+    List<String> recentlySpoken = const [],
+    bool forDisplay = false,
   });
 }

@@ -6,6 +6,7 @@ abstract interface class VoicePhrasingRemoteDataSource {
   Future<String> phrase({
     required SpokenDraft draft,
     required List<String> recentlySpoken,
+    bool forDisplay = false,
   });
 }
 
@@ -32,6 +33,22 @@ Rules:
 - Plain prose only: no lists, markdown, emoji, or stage directions.
 ''';
 
+const _chatCaptionStyleGuide = '''
+You write short chat-bubble captions for an airline travel assistant.
+Rewrite the given facts as ONE short message the passenger will read on screen.
+
+Rules:
+- Convey every fact. Never add a fact, a number, a price, a time, or a code
+  that is not in the list. Copy the "must_include" fragments exactly.
+- Use normal readable forms: "5:05 AM", "\$165", "B6935", "gate B12".
+  Never write speech spelling like "5 oh 5", "B 6 9 3 5", or "one hundred
+  sixty five dollars".
+- 2 sentences where possible, 3 at the very most.
+- Warm and polite. Ask at most one question when "invitation" calls for one.
+- Vary your wording from "recent_utterances".
+- Plain prose only: no lists, markdown, emoji, or stage directions.
+''';
+
 /// Provider-agnostic phrasing call. Uses the same `/chat` surface and
 /// [Dio] instance as [OpenAiChatRemoteDataSource], so swapping providers stays
 /// a DI-level change.
@@ -45,18 +62,25 @@ class LlmVoicePhrasingRemoteDataSource implements VoicePhrasingRemoteDataSource 
   Future<String> phrase({
     required SpokenDraft draft,
     required List<String> recentlySpoken,
+    bool forDisplay = false,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/chat/message',
       data: {
         'model': model,
-        'mode': 'voice_phrasing',
-        'instructions': _voicePhrasingStyleGuide,
+        'mode': forDisplay ? 'chat_caption' : 'voice_phrasing',
+        'instructions': forDisplay ? _chatCaptionStyleGuide : _voicePhrasingStyleGuide,
         'topic': draft.topic.name,
         'tone': draft.tone.name,
         'invitation': draft.invitation.name,
-        'facts': draft.clauses,
-        'must_include': draft.mustInclude,
+        'facts': forDisplay
+            ? [draft.displayFallbackText ?? draft.fallbackText]
+            : draft.clauses,
+        'must_include': forDisplay
+            ? (draft.displayMustInclude.isNotEmpty
+                ? draft.displayMustInclude
+                : draft.mustInclude)
+            : draft.mustInclude,
         'recent_utterances': recentlySpoken,
       },
     );
@@ -92,8 +116,13 @@ class MockVoicePhrasingRemoteDataSource implements VoicePhrasingRemoteDataSource
   Future<String> phrase({
     required SpokenDraft draft,
     required List<String> recentlySpoken,
+    bool forDisplay = false,
   }) async {
     if (latency > Duration.zero) await Future<void>.delayed(latency);
+
+    if (forDisplay) {
+      return draft.displayFallbackText ?? draft.fallbackText;
+    }
 
     final turn = _turns.update(draft.topic, (value) => value + 1, ifAbsent: () => 0);
     final clauses = draft.clauses.where((clause) => clause.trim().isNotEmpty).toList();
@@ -161,38 +190,38 @@ class MockVoicePhrasingRemoteDataSource implements VoicePhrasingRemoteDataSource
     SpokenInvitation.chooseOffer: [
       'Would you like that one, or would you prefer a different airline?',
       'Shall I go ahead with that, or would you rather hear the others?',
-      "I'm happy to book that one, or to find you another.",
+      "I'm happy to book that one, or to find you another — which would you prefer?",
       'Would you like me to take that one, or look through the rest with you?',
     ],
     SpokenInvitation.confirmSingleOffer: [
       'Would you like me to book it for you?',
       'Shall I go ahead and book that?',
-      "I'm happy to book it whenever you're ready.",
+      "I'm happy to book it whenever you're ready — shall I go ahead?",
       'Would you like me to secure that for you?',
     ],
     SpokenInvitation.chooseSeat: [
       'Would you like a window, an aisle, or a particular seat?',
       'Shall I find you a window, or would you rather pick one yourself?',
-      'A window or an aisle, or name a seat — whichever is easier.',
+      'Would a window or an aisle suit you, or shall I pick a seat?',
       'Would you prefer a window seat or an aisle seat?',
     ],
     SpokenInvitation.chooseBaggage: [
       'Which would you prefer?',
       'Which of those suits you best?',
       'Would any of those work for you?',
-      "Just let me know which you'd like.",
+      "Which would you like?",
     ],
     SpokenInvitation.offerOtherDates: [
       'Would you like to try a different date, or another destination?',
       'Shall I look at other days for you?',
-      "I'm happy to check another date or route if you like.",
+      "I'm happy to check another date or route — would you like that?",
       'Would a different day work for you?',
     ],
     SpokenInvitation.anythingElse: [
       'Is there anything else I can help you with?',
       'Anything else I can do for you?',
-      'Do let me know if you need anything else.',
-      "I'm happy to help with anything else.",
+      'Is there anything else you need?',
+      'Can I help with anything else?',
     ],
     SpokenInvitation.awaitAgent: [
       'Do stay with me and I will pass you across.',

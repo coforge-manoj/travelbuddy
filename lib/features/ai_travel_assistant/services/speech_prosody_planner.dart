@@ -11,19 +11,23 @@ class SpeechSegment {
   final double rate;
 }
 
-/// Splits spoken copy into sentence segments and assigns subtle pitch/rate
-/// so questions, soft apologies, and dense codes don't all sound identical.
+/// Splits spoken copy into sentence segments and assigns pitch/rate so
+/// questions, soft apologies, and dense codes don't all sound identical.
 ///
-/// Platform TTS (`flutter_tts`) has no SSML; the only lever is changing
-/// engine knobs between utterances. Deltas stay small on purpose.
+/// Online speech uses Edge neural voices, which already rise on `?`, so
+/// questions stay a single segment with a light pitch nudge (also used by
+/// the on-device [flutter_tts] fallback). Platform TTS has no SSML; Edge
+/// accepts rate/pitch as `±N%` / `±NHz` via [VoiceService].
 class SpeechProsodyPlanner {
   const SpeechProsodyPlanner._();
 
   static const statementPitch = 1.0;
   static const statementRate = 0.48;
 
+  /// Whole-question nudge for engines that ignore `?`. Neural Edge voices
+  /// mostly ignore this and still sound interrogative from the punctuation.
   static const questionPitch = 1.12;
-  static const questionRate = 0.50;
+  static const questionRate = 0.47;
 
   static const softPitch = 0.95;
   static const softRate = 0.44;
@@ -33,6 +37,15 @@ class SpeechProsodyPlanner {
 
   static final _softOpeners = RegExp(
     r"^(i'm sorry|i am sorry|i'm afraid|unfortunately|sadly)\b",
+    caseSensitive: false,
+  );
+
+  /// Interrogative openers that often arrive without a trailing `?` from the
+  /// phrasing model ("Shall I go ahead and book that.").
+  static final _interrogativeOpeners = RegExp(
+    r"^(would you|wouldn't you|shall i|should i|do you|does that|did you|"
+    r"which|what would|what can|what's|whats|can i|can you|could you|"
+    r"could i|is there|are you|have you|want me|may i|how about)\b",
     caseSensitive: false,
   );
 
@@ -57,7 +70,7 @@ class SpeechProsodyPlanner {
   }
 
   static SpeechSegment _toSegment(String sentence) {
-    if (sentence.endsWith('?')) {
+    if (_isQuestion(sentence)) {
       return SpeechSegment(
         text: sentence,
         pitch: questionPitch,
@@ -65,24 +78,22 @@ class SpeechProsodyPlanner {
       );
     }
     if (_softOpeners.hasMatch(sentence)) {
-      return SpeechSegment(
-        text: sentence,
-        pitch: softPitch,
-        rate: softRate,
-      );
+      return SpeechSegment(text: sentence, pitch: softPitch, rate: softRate);
     }
     if (_isDense(sentence)) {
-      return SpeechSegment(
-        text: sentence,
-        pitch: densePitch,
-        rate: denseRate,
-      );
+      return SpeechSegment(text: sentence, pitch: densePitch, rate: denseRate);
     }
     return SpeechSegment(
       text: sentence,
       pitch: statementPitch,
       rate: statementRate,
     );
+  }
+
+  static bool _isQuestion(String sentence) {
+    if (sentence.endsWith('?')) return true;
+    final body = sentence.replaceAll(RegExp(r'[.!?]+$'), '').trim();
+    return _interrogativeOpeners.hasMatch(body);
   }
 
   static bool _isDense(String sentence) {

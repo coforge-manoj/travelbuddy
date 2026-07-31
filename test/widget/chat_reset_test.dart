@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -32,7 +33,28 @@ class _FakeChatHistoryRepository implements ChatHistoryRepository {
 }
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+
+  // The voice plugins have no implementation under `flutter_test`, and a call
+  // on an unmocked channel never completes inside `fakeAsync` — which strands
+  // every card action at the `await stopSpeaking()` it opens with, so nothing
+  // below this would ever get past tapping "Select". Stubbing the platform
+  // side lets the chat logic be what the test actually exercises.
+  setUp(() {
+    const channels = <String>[
+      'flutter_tts',
+      'xyz.luan/audioplayers.global',
+      'xyz.luan/audioplayers',
+      'dev.fluttercommunity.plus/connectivity',
+      'plugin.csdcorp.com/speech_to_text',
+    ];
+    for (final name in channels) {
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        MethodChannel(name),
+        (call) async => null,
+      );
+    }
+  });
 
   // Deliberately avoids pumpAndSettle: both the typing indicator and the
   // "Select" button's inline spinner animate indefinitely, which would make
@@ -70,11 +92,27 @@ void main() {
       await settle(tester);
     }
 
+    /// Offers are not shown proactively any more — they arrive when the
+    /// passenger asks. Talkback is on by default, so the composer is behind
+    /// the keyboard escape hatch on the voice bar.
+    Future<void> askToBook() async {
+      await tester.tap(find.byIcon(Icons.keyboard_alt_outlined));
+      await settle(tester);
+      await tester.enterText(find.byType(TextField), 'I want to book a flight');
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await settle(tester);
+      await settle(tester);
+    }
+
     await openChat();
     expect(find.byType(ChatPage), findsOneWidget);
     expect(find.textContaining('Hello Joe'), findsOneWidget);
-    expect(find.text('Flight options'), findsOneWidget);
+    expect(find.text('Flight options'), findsNothing);
     expect(find.text('Choose a seat'), findsNothing);
+
+    await askToBook();
+    expect(find.text('Flight options'), findsOneWidget);
 
     // Mutate the session by booking the first suggested flight — this now
     // starts the guided seat-selection step rather than confirming outright,
@@ -93,9 +131,13 @@ void main() {
 
     await openChat();
 
-    // Fresh session: no leftover booking flow, just the welcome + offers again.
+    // Fresh session: no leftover booking flow, just the welcome message —
+    // and asking again starts the flow over from the offers card.
     expect(find.text('Choose a seat'), findsNothing);
     expect(find.textContaining('Hello Joe'), findsOneWidget);
+    expect(find.text('Flight options'), findsNothing);
+
+    await askToBook();
     expect(find.text('Flight options'), findsOneWidget);
   });
 }

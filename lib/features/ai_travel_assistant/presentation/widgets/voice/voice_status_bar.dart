@@ -61,7 +61,9 @@ class _VoiceStatusBarState extends State<VoiceStatusBar>
   Duration _durationFor(ChatStatus status) => switch (status) {
         ChatStatus.listening => const Duration(milliseconds: 1400),
         ChatStatus.speaking => const Duration(milliseconds: 900),
-        ChatStatus.sendingMessage || ChatStatus.loadingHistory =>
+        ChatStatus.sendingMessage ||
+        ChatStatus.loadingHistory ||
+        ChatStatus.preparingSpeech =>
           const Duration(milliseconds: 3200),
         _ => const Duration(milliseconds: 2500),
       };
@@ -69,6 +71,7 @@ class _VoiceStatusBarState extends State<VoiceStatusBar>
   String get _label => switch (widget.status) {
         ChatStatus.listening => 'Listening…',
         ChatStatus.speaking => 'Speaking — stop at left, or tap orb to talk',
+        ChatStatus.preparingSpeech => 'Getting the answer ready…',
         ChatStatus.sendingMessage || ChatStatus.loadingHistory => 'Working on it…',
         _ => 'Tap to speak',
       };
@@ -76,7 +79,11 @@ class _VoiceStatusBarState extends State<VoiceStatusBar>
   @override
   Widget build(BuildContext context) {
     final mode = VoiceOrbMode.from(widget.status);
-    final isSpeaking = widget.status == ChatStatus.speaking;
+    // The stop control appears as soon as a turn is committed, not just once
+    // it is audible — otherwise there is a stretch where narration is already
+    // unstoppable-looking but nothing can be cancelled.
+    final canStopAudio = widget.status == ChatStatus.speaking ||
+        widget.status == ChatStatus.preparingSpeech;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -105,13 +112,13 @@ class _VoiceStatusBarState extends State<VoiceStatusBar>
                       // Fades in only while there is audio to cut, but always
                       // holds its 48px so the orb stays optically centred.
                       child: AnimatedOpacity(
-                        opacity: isSpeaking ? 1 : 0,
+                        opacity: canStopAudio ? 1 : 0,
                         duration: const Duration(milliseconds: 220),
                         curve: Curves.easeOut,
                         child: IgnorePointer(
-                          ignoring: !isSpeaking,
+                          ignoring: !canStopAudio,
                           child: StopAudioButton(
-                            active: isSpeaking,
+                            active: canStopAudio,
                             onTap: widget.onStopSpeaking,
                           ),
                         ),

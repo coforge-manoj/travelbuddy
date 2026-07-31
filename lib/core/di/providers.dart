@@ -9,8 +9,10 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/flight_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/seat_remote_datasource.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/voice_action_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/datasource/voice_phrasing_remote_datasource.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/agent_repository_impl.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_action_parser.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/airport_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/baggage_repository_impl.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/repositories/chat_history_repository_impl.dart';
@@ -73,6 +75,10 @@ final voiceServiceProvider = Provider<VoiceService>((ref) {
 /// with `false` to fall back to the deterministic summaries — useful when
 /// diagnosing whether odd spoken copy came from the model or from the app.
 final llmVoicePhrasingEnabledProvider = Provider<bool>((ref) => true);
+
+/// Whether unrecognized spoken card commands are sent to the action model.
+/// Rules still run first either way; this only gates the LLM fallback.
+final llmVoiceActionEnabledProvider = Provider<bool>((ref) => true);
 
 /// Chooses the words for each spoken turn. Falls back to the deterministic
 /// summary whenever phrasing is disabled, slow, or returns copy that no longer
@@ -148,6 +154,21 @@ final voicePhrasingRemoteDataSourceProvider = Provider<VoicePhrasingRemoteDataSo
   return ref.watch(useMockBackendProvider)
       ? MockVoicePhrasingRemoteDataSource()
       : LlmVoicePhrasingRemoteDataSource(ref.watch(dioProvider));
+});
+
+final voiceActionRemoteDataSourceProvider = Provider<VoiceActionRemoteDataSource>((ref) {
+  return ref.watch(useMockBackendProvider)
+      ? MockVoiceActionRemoteDataSource()
+      : LlmVoiceActionRemoteDataSource(ref.watch(dioProvider));
+});
+
+/// Rules-first card command parser; optionally asks the action model when the
+/// transcript does not match a closed phrase and a selectable card is up.
+final voiceActionParserProvider = Provider<VoiceActionParser>((ref) {
+  if (!ref.watch(llmVoiceActionEnabledProvider)) {
+    return const RuleBasedVoiceActionParser();
+  }
+  return HybridVoiceActionParser(remote: ref.watch(voiceActionRemoteDataSourceProvider));
 });
 
 final agentRemoteDataSourceProvider = Provider<AgentRemoteDataSource>((ref) {

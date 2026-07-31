@@ -9,9 +9,30 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/wi
 /// legend and a confirm button that calls [ChatViewModel.confirmSeatChange]
 /// once the passenger taps an available seat.
 class SeatMapCard extends ConsumerStatefulWidget {
-  const SeatMapCard({super.key, required this.seatMap});
+  const SeatMapCard({
+    super.key,
+    required this.seatMap,
+    this.isInteractive = true,
+    this.confirmedSeatNumber,
+    this.highlightedSeatNumber,
+    this.showSkip = false,
+  });
 
   final SeatMap seatMap;
+
+  /// False once a seat was confirmed or skipped on this (or a prior) map.
+  final bool isInteractive;
+
+  /// Seat confirmed in chat state — kept after ListView recycles this card.
+  final String? confirmedSeatNumber;
+
+  /// Seat named by voice or typing and waiting on a spoken confirmation.
+  /// Mirrored onto the map so a passenger who said "12A" can see the choice
+  /// land before they are asked to agree to it.
+  final String? highlightedSeatNumber;
+
+  /// Whether to show Skip (guided booking flow only).
+  final bool showSkip;
 
   @override
   ConsumerState<SeatMapCard> createState() => _SeatMapCardState();
@@ -21,6 +42,20 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
   String? _selectedSeatNumber;
   bool _confirmed = false;
   bool _skipping = false;
+
+  @override
+  void didUpdateWidget(SeatMapCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A newly spoken seat replaces whatever was tapped earlier — that older
+    // choice is not what the assistant is asking about any more. Dropping it
+    // here (rather than ranking the two at paint time) keeps a tap *after*
+    // the highlight winning, which is what a passenger correcting the
+    // assistant expects.
+    final highlighted = widget.highlightedSeatNumber;
+    if (highlighted != null && highlighted != oldWidget.highlightedSeatNumber) {
+      _selectedSeatNumber = null;
+    }
+  }
 
   Map<int, List<Seat>> get _seatsByRow {
     final grouped = <int, List<Seat>>{};
@@ -33,8 +68,7 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
     return grouped;
   }
 
-  Seat? get _selectedSeat {
-    final seatNumber = _selectedSeatNumber;
+  Seat? _seatByNumber(String? seatNumber) {
     if (seatNumber == null) return null;
     for (final seat in widget.seatMap.seats) {
       if (seat.seatNumber == seatNumber) return seat;
@@ -42,15 +76,19 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
     return null;
   }
 
+  /// What the card is currently offering to confirm: the seat the passenger
+  /// tapped, or the one they named out loud and have not answered for yet.
+  String? get _pendingSeatNumber => _selectedSeatNumber ?? widget.highlightedSeatNumber;
+
   Future<void> _confirm() async {
-    final seatNumber = _selectedSeatNumber;
-    if (seatNumber == null || _confirmed || _skipping) return;
+    final seatNumber = _pendingSeatNumber;
+    if (!widget.isInteractive || seatNumber == null || _confirmed || _skipping) return;
     setState(() => _confirmed = true);
     await ref.read(chatViewModelProvider.notifier).confirmSeatChange(seatNumber);
   }
 
   Future<void> _skip() async {
-    if (_confirmed || _skipping) return;
+    if (!widget.isInteractive || _confirmed || _skipping) return;
     setState(() => _skipping = true);
     await ref.read(chatViewModelProvider.notifier).skipSeatSelection();
   }
@@ -59,10 +97,10 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
   Widget build(BuildContext context) {
     final rows = _seatsByRow.keys.toList()..sort();
     final scheme = Theme.of(context).colorScheme;
-    final selectedSeat = _selectedSeat;
-    final showSkip = ref.watch(
-      chatViewModelProvider.select((state) => state.hasActiveBookingFlow),
-    );
+    final locked = !widget.isInteractive;
+    final displaySeatNumber =
+        locked ? (widget.confirmedSeatNumber ?? _pendingSeatNumber) : _pendingSeatNumber;
+    final selectedSeat = _seatByNumber(displaySeatNumber);
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -83,7 +121,10 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
               children: [
                 Icon(Icons.event_seat, size: 18, color: scheme.primary),
                 const SizedBox(width: 8),
-                Text('Choose a seat', style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  locked ? 'Seat selection' : 'Choose a seat',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -101,8 +142,8 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
                     for (final seat in _seatsByRow[row]!) ...[
                       SeatTile(
                         seat: seat,
-                        isSelected: seat.seatNumber == _selectedSeatNumber,
-                        onTap: _confirmed
+                        isSelected: seat.seatNumber == displaySeatNumber,
+                        onTap: locked || _confirmed
                             ? null
                             : () => setState(() => _selectedSeatNumber = seat.seatNumber),
                       ),
@@ -113,11 +154,21 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
                 ),
               ),
             const SizedBox(height: 10),
-            _Legend(),
+            const _Legend(),
             const SizedBox(height: 12),
-            if (_confirmed)
+            if (locked)
               Text(
-                'Confirming seat $_selectedSeatNumber…',
+                widget.confirmedSeatNumber != null
+                    ? 'Seat ${widget.confirmedSeatNumber} confirmed'
+                    : 'Seat selection skipped',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              )
+            else if (_confirmed)
+              Text(
+                'Confirming seat $displaySeatNumber…',
                 style: Theme.of(context).textTheme.bodySmall,
               )
             else if (_skipping)
@@ -129,7 +180,7 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (showSkip)
+                  if (widget.showSkip)
                     TextButton(
                       onPressed: _skip,
                       child: const Text('Skip'),

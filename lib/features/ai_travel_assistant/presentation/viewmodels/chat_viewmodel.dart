@@ -245,20 +245,22 @@ class ChatViewModel extends StateNotifier<ChatState> {
     );
     state = state.copyWith(status: ChatStatus.sendingMessage, clearError: true);
 
-    if (state.hasActiveScenario) {
-      await _advanceScenario(trimmed);
-    } else {
-      final scenario = _matchScenario(trimmed);
-      if (scenario != null) {
-        await _startScenario(scenario);
-      } else {
+    // if (state.hasActiveScenario) {
+    //   await _advanceScenario(trimmed);
+    // } else {
+    //   final scenario = _matchScenario(trimmed);
+    //   if (scenario != null) {
+    //     await _startScenario(scenario);
+    //   } else {
+
+
         final intentResult = await _classifyIntentUseCase(trimmed);
         await intentResult.fold(
           (failure) async => _appendError(failure.message),
           (intent) async => _handleIntent(intent, trimmed),
         );
-      }
-    }
+      // }
+    // }
 
     state = state.copyWith(status: ChatStatus.idle);
   }
@@ -443,28 +445,214 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
 
     switch (intent.type) {
+      case IntentType.searchFlights:
+        await _handleSearchFlight(intent);
+
       case IntentType.bookFlight:
         await _handleBookFlight();
+
       case IntentType.flightStatus:
       case IntentType.boardingTime:
         await _handleFlightStatus();
+
       case IntentType.seatSelection:
         await _handleSeatSelection();
+
       case IntentType.addBaggage:
       case IntentType.baggageAllowance:
         await _handleBaggage();
+
       case IntentType.terminalInformation:
       case IntentType.counterInformation:
       case IntentType.airportNavigation:
         await _handleAirportInfo();
+
+      case IntentType.tripDiscovery:
+        await _handleTripDiscovery();
+
+      case IntentType.tripRecommendation:
+        await _handleTripRecommendation();
+
+      case IntentType.travelDocuments:
+        await _handleTravelDocuments();
+
+      case IntentType.itineraryOptimization:
+        await _handleItineraryOptimization();
+
+      case IntentType.travelPlanning:
+        await _handleTravelPlanning();
+
+      case IntentType.destinationGuidance:
+        await _handleDestinationGuidance();
+
+      case IntentType.airportAmenities:
+        await _handleAirportAmenities();
+
+      case IntentType.inflightAssistance:
+        await _handleInflightAssistance();
+
+      case IntentType.arrivalAssistance:
+        await _handleArrivalAssistance();
+
+      case IntentType.baggageTracking:
+        await _handleBaggageTracking();
+
+      case IntentType.tripManagement:
+        await _handleTripManagement();
+
       case IntentType.humanAgent:
         await _handleEscalation(utterance);
+
       case IntentType.faq:
       case IntentType.unknown:
         await _handleGenericReply(utterance);
     }
   }
 
+  Future<void> _handleTripDiscovery() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Trip discovery request received.',
+      ),
+    );
+  }
+
+  Future<void> _handleTripRecommendation() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Trip recommendation request received.',
+      ),
+    );
+  }
+
+  Future<void> _handleTravelDocuments() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Travel document assistance requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleItineraryOptimization() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Itinerary optimization requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleTravelPlanning() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Travel planning assistance requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleDestinationGuidance() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Destination guidance requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleAirportAmenities() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Airport amenities information requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleInflightAssistance() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'In-flight assistance requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleArrivalAssistance() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Arrival assistance requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleBaggageTracking() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Baggage tracking requested.',
+      ),
+    );
+  }
+
+  Future<void> _handleTripManagement() async {
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Trip management request received.',
+      ),
+    );
+  }
+
+
+Future<void>_handleSearchFlight(IntentResult intent)async{
+  _appendMessage(
+    ChatMessage(
+      id: _uuid.v4(),
+      role: ChatRole.assistant,
+      type: ChatMessageType.text,
+      timestamp: DateTime.now(),
+      text: 'Search Flights received',
+    ),
+  );
+}
   Future<void> _handleFlightStatus() async {
     final booking = _activeBooking;
     if (booking == null) {

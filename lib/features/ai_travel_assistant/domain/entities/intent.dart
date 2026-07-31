@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 enum IntentType {
+  searchFlights,
   bookFlight,
   flightStatus,
   seatSelection,
@@ -12,8 +13,22 @@ enum IntentType {
   baggageAllowance,
   humanAgent,
   faq,
+
+  tripDiscovery,
+  tripRecommendation,
+  travelDocuments,
+  itineraryOptimization,
+  travelPlanning,
+  destinationGuidance,
+  airportAmenities,
+  inflightAssistance,
+  arrivalAssistance,
+  baggageTracking,
+  tripManagement,
+
   unknown,
 }
+
 
 /// Result of classifying a passenger's free-text message into an actionable
 /// intent, along with a confidence score used to decide whether to offer
@@ -23,6 +38,8 @@ class IntentResult extends Equatable {
     required this.type,
     required this.confidence,
     this.entities = const {},
+    this.originalMessage=''
+
   });
 
   final IntentType type;
@@ -36,6 +53,7 @@ class IntentResult extends Equatable {
   static const double lowConfidenceThreshold = 0.45;
 
   bool get isLowConfidence => confidence < lowConfidenceThreshold;
+  final String originalMessage;
 
   @override
   List<Object?> get props => [type, confidence, entities];

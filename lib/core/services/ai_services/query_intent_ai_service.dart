@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
-import '../../features/ai_travel_assistant/domain/entities/intent.dart';
+import '../../../features/ai_travel_assistant/domain/entities/intent.dart';
 
 class QueryUnderstandingService {
   QueryUnderstandingService._();

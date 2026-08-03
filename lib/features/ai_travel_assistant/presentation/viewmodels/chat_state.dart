@@ -4,6 +4,9 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/domain/entities/proactive_scenario.dart';
 
+import '../../data/models/trip_discovery/trip_discovery_context.dart';
+import '../../domain/entities/intent.dart';
+
 enum ChatStatus { idle, loadingHistory, sendingMessage, listening, error }
 
 class ChatState extends Equatable {
@@ -17,6 +20,8 @@ class ChatState extends Equatable {
     this.pendingBaggagePurchases = const [],
     this.activeScenario,
     this.scenarioTurnIndex = 0,
+    this.activeIntent,
+    this.tripDiscoveryContext = const TripDiscoveryContext(),
   });
 
   final List<ChatMessage> messages;
@@ -41,7 +46,9 @@ class ChatState extends Equatable {
   /// currently expected to reply to.
   final int scenarioTurnIndex;
 
-  bool get isBusy => status == ChatStatus.sendingMessage || status == ChatStatus.loadingHistory;
+  bool get isBusy =>
+      status == ChatStatus.sendingMessage ||
+      status == ChatStatus.loadingHistory;
 
   /// Whether the passenger is mid-way through the guided post-booking flow
   /// (seat + baggage selection), as opposed to a standalone seat/baggage
@@ -50,6 +57,8 @@ class ChatState extends Equatable {
 
   bool get hasActiveScenario => activeScenario != null;
 
+  final IntentType? activeIntent;
+  final TripDiscoveryContext tripDiscoveryContext;
   ChatState copyWith({
     List<ChatMessage>? messages,
     ChatStatus? status,
@@ -64,18 +73,28 @@ class ChatState extends Equatable {
     ProactiveScenario? activeScenario,
     bool clearActiveScenario = false,
     int? scenarioTurnIndex,
+    IntentType? activeIntent,
+    bool clearActiveIntent = false,
+    TripDiscoveryContext? tripDiscoveryContext,
   }) {
     return ChatState(
       messages: messages ?? this.messages,
       status: status ?? this.status,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isVoiceOutputEnabled: isVoiceOutputEnabled ?? this.isVoiceOutputEnabled,
-      pendingBooking: clearPendingBooking ? null : (pendingBooking ?? this.pendingBooking),
-      pendingSeatNumber:
-          clearPendingSeatNumber ? null : (pendingSeatNumber ?? this.pendingSeatNumber),
-      pendingBaggagePurchases: pendingBaggagePurchases ?? this.pendingBaggagePurchases,
-      activeScenario: clearActiveScenario ? null : (activeScenario ?? this.activeScenario),
+      pendingBooking:
+          clearPendingBooking ? null : (pendingBooking ?? this.pendingBooking),
+      pendingSeatNumber: clearPendingSeatNumber
+          ? null
+          : (pendingSeatNumber ?? this.pendingSeatNumber),
+      pendingBaggagePurchases:
+          pendingBaggagePurchases ?? this.pendingBaggagePurchases,
+      activeScenario:
+          clearActiveScenario ? null : (activeScenario ?? this.activeScenario),
       scenarioTurnIndex: scenarioTurnIndex ?? this.scenarioTurnIndex,
+      activeIntent:
+          clearActiveIntent ? null : (activeIntent ?? this.activeIntent),
+      tripDiscoveryContext: tripDiscoveryContext ?? this.tripDiscoveryContext,
     );
   }
 
@@ -90,5 +109,7 @@ class ChatState extends Equatable {
         pendingBaggagePurchases,
         activeScenario,
         scenarioTurnIndex,
+        activeIntent,
+        tripDiscoveryContext,
       ];
 }

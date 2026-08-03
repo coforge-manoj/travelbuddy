@@ -1,0 +1,4 @@
+enum ConversationRoute {
+  continueFlow,
+  switchFlow,
+}

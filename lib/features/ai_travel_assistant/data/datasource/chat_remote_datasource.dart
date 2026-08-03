@@ -1,4 +1,4 @@
-import 'package:ai_travel_assistant/core/services/query_intent_ai_service.dart';
+import 'package:ai_travel_assistant/core/services/ai_services/query_intent_ai_service.dart';
 import 'package:dio/dio.dart';
 import 'package:ai_travel_assistant/core/errors/exceptions.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/chat_message_model.dart';

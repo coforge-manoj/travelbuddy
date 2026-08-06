@@ -7,16 +7,22 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_header.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/message_composer.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/quick_actions_list.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/rich_card_widget.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/typing_indicator.dart';
+import 'package:ai_travel_assistant/features/concierge_demo/presentation/widgets/suggested_reply_chip.dart';
 
 /// The single entry-point screen for the AI Travel Assistant. Push this from
 /// the host app — e.g.
 /// `Navigator.push(context, AiTravelAssistantEntryPoint.route())` — it's
 /// fully self-contained given the providers wired in `core/di/providers.dart`.
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key});
+  const ChatPage({super.key, this.autoStartScenarioId});
+
+  /// A Journey Concierge scenario id to kick off as soon as this page
+  /// opens — set when a passenger taps the post-use-case reminder
+  /// notification, so tapping it lands them straight back in the concierge
+  /// conversation instead of just the plain welcome screen.
+  final String? autoStartScenarioId;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -24,6 +30,31 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Resolve which scenario (if any) should replace the plain welcome
+    // message: either the one behind a tapped notification, or — if the
+    // passenger instead opened the AI assistant directly, missing or
+    // ignoring the notification — whichever use case a pending reminder was
+    // still waiting on. Deliberately left in the pending marker as-is here:
+    // it's only cleared once that scenario actually completes (see
+    // `ChatViewModel._scheduleNextUseCaseReminder`), so backing out before
+    // finishing it and reopening the assistant resumes the same use case
+    // again instead of losing it.
+    final tappedScenarioId = widget.autoStartScenarioId;
+    final pendingScenarioId = ref.read(pendingNextScenarioIdProvider);
+    final effectiveScenarioId = tappedScenarioId ?? pendingScenarioId;
+    if (effectiveScenarioId != null) {
+      // Deferred until after the widget tree finishes building this frame —
+      // Riverpod disallows modifying a provider's state directly inside
+      // initState.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(chatViewModelProvider.notifier).startScenarioById(effectiveScenarioId);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -54,10 +85,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
 
     final isTyping = state.status == ChatStatus.sendingMessage;
-    // Show the onboarding shortcuts once the welcome message has landed,
-    // until the passenger sends their first message.
-    final showQuickActions = state.messages.length <= 1 && state.status == ChatStatus.idle;
-    final itemCount = state.messages.length + (isTyping ? 1 : 0) + (showQuickActions ? 1 : 0);
+    final itemCount = state.messages.length + (isTyping ? 1 : 0);
+
+    final activeScenario = state.activeScenario;
+    final showSuggestedReply = activeScenario != null && !state.isBusy;
+    final nextScenarioTurn = showSuggestedReply && state.scenarioTurnIndex < activeScenario.turns.length
+        ? activeScenario.turns[state.scenarioTurnIndex]
+        : null;
 
     return Scaffold(
       body: Column(
@@ -79,13 +113,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             ? RichCardWidget(message: message)
                             : ChatBubble(message: message);
                       }
-                      if (isTyping && index == state.messages.length) {
-                        return const TypingIndicator();
-                      }
-                      return QuickActionsList(onSelected: viewModel.sendMessage);
+                      return const TypingIndicator();
                     },
                   ),
           ),
+          if (nextScenarioTurn != null)
+            SuggestedReplyChip(
+              text: nextScenarioTurn.parentLine,
+              onTap: () => viewModel.sendMessage(nextScenarioTurn.parentLine),
+            ),
           MessageComposer(
             enabled: !state.isBusy,
             isListening: state.status == ChatStatus.listening,

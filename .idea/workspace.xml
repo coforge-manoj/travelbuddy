@@ -1,36 +1,92 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="FileEditorManager">
-    <leaf>
-      <file leaf-file-name="main.dart" pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/lib/main.dart">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="0">
-              <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-    </leaf>
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
   </component>
-  <component name="ToolWindowManager">
-    <editor active="true" />
-    <layout>
-      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
-    </layout>
+  <component name="ChangeListManager">
+    <list default="true" id="57639adf-53cb-45a3-883b-5bc128f4f571" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/lib/core/services/ai_services/humanized_response_service/humanized_response_service_promt.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/core/services/ai_services/humanized_response_service/response_humanizer_service.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/core/services/api_services/api_service.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/humanised_response.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/services/flight_services.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/libraries/Flutter_Plugins.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/libraries/Flutter_Plugins.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ai_travel_assistant.iml" beforeDir="false" afterPath="$PROJECT_DIR$/ai_travel_assistant.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_router_result.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_router_result.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversational_route_promt.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversational_route_promt.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/query_intent_ai_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/query_intent_ai_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_promt.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_promt.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_discovery_context.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_discovery_context.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_discovery_result_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_discovery_result_model.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_profile.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_profile.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_recomendation.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_recomendation.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/seat_map/seat_map_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/seat_map/seat_map_card.dart" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ProjectView">
-    <navigator currentView="ProjectPane" proportions="" version="1">
-    </navigator>
-    <panes>
-      <pane id="ProjectPane">
-        <option name="show-excluded-files" value="false" />
-      </pane>
-    </panes>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
   </component>
-  <component name="PropertiesComponent">
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="dart.analysis.tool.window.force.activate" value="true" />
-    <property name="show.migrate.to.gradle.popup" value="false" />
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Dart File" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3HWrRSy3mU3EJVrQqBFDuwfqQRM" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Flutter.main.dart.executor": "Debug",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "ToolWindow.Running Devices.ShowToolbar": "false",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "dart.analysis.tool.window.visible": "false",
+    "git-widget-placeholder": "intractice__usecase__query__inten__filter",
+    "io.flutter.project.isFirstOpen": "true",
+    "io.flutter.reload.alreadyRun": "true",
+    "kotlin-language-version-configured": "true",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "show.migrate.to.gradle.popup": "false"
+  }
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="57639adf-53cb-45a3-883b-5bc128f4f571" name="Changes" comment="" />
+      <created>1785994659229</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1785994659229</updated>
+    </task>
+    <servers />
   </component>
 </project>

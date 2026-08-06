@@ -26,13 +26,13 @@ class _BaggageOptionsCardState extends ConsumerState<BaggageOptionsCard> {
   Future<void> _purchase(String optionId) async {
     if (_isBusy) return;
     setState(() => _purchasingOptionId = optionId);
-    await ref.read(chatViewModelProvider.notifier).confirmBaggagePurchase(optionId);
+    // await ref.read(chatViewModelProvider.notifier).confirmBaggagePurchase(optionId);
   }
 
   Future<void> _finish() async {
     if (_isBusy) return;
     setState(() => _finishing = true);
-    await ref.read(chatViewModelProvider.notifier).finishBooking();
+    // await ref.read(chatViewModelProvider.notifier).finishBooking();
   }
 
   @override

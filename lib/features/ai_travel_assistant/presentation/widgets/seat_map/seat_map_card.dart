@@ -46,13 +46,13 @@ class _SeatMapCardState extends ConsumerState<SeatMapCard> {
     final seatNumber = _selectedSeatNumber;
     if (seatNumber == null || _confirmed || _skipping) return;
     setState(() => _confirmed = true);
-    await ref.read(chatViewModelProvider.notifier).confirmSeatChange(seatNumber);
+    // await ref.read(chatViewModelProvider.notifier).confirmSeatChange(seatNumber);
   }
 
   Future<void> _skip() async {
     if (_confirmed || _skipping) return;
     setState(() => _skipping = true);
-    await ref.read(chatViewModelProvider.notifier).skipSeatSelection();
+    // await ref.read(chatViewModelProvider.notifier).skipSeatSelection();
   }
 
   @override

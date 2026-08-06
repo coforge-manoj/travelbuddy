@@ -3,10 +3,10 @@ class ConversationRouterResult {
 
   final bool requiresReclassification;
 
-  /// Final prompt to be sent to backend
+  /// Final prompt to send to backend
   final String normalizedPrompt;
 
-  /// Generic conversation context
+  /// Generic context
   final Map<String, dynamic> updatedContext;
 
   const ConversationRouterResult({
@@ -19,19 +19,19 @@ class ConversationRouterResult {
   factory ConversationRouterResult.fromJson(
       Map<String, dynamic> json,
       ) {
+    final updatedContext =
+    json['updatedContext'] as Map?;
+
     return ConversationRouterResult(
       continueConversation:
       json['continueConversation'] == true,
-
       requiresReclassification:
       json['requiresReclassification'] == true,
-
       normalizedPrompt:
       json['normalizedPrompt']?.toString() ?? '',
-
-      updatedContext: Map<String, dynamic>.from(
-        (json['updatedContext'] as Map?) ?? {},
-      ),
+      updatedContext: updatedContext != null
+          ? Map<String, dynamic>.from(updatedContext)
+          : <String, dynamic>{},
     );
   }
 }

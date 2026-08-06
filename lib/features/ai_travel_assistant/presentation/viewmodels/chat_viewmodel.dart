@@ -31,7 +31,10 @@ import 'package:ai_travel_assistant/features/concierge_demo/data/scenario_catalo
 import 'package:ai_travel_assistant/features/concierge_demo/domain/entities/proactive_scenario.dart';
 
 import '../../../../core/services/ai_services/conversation_route/conversation_route_service.dart';
+import '../../../../core/services/ai_services/humanized_response_service/response_humanizer_service.dart';
 import '../../../../core/services/ai_services/trip_discovery/trip_discovery_service.dart';
+import '../../data/models/conersation_route/trip_discovery_context.dart';
+import '../services/flight_services.dart';
 
 const _uuid = Uuid();
 
@@ -115,7 +118,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
   final bool Function() _getVoiceOutputEnabled;
   final void Function(String? scenarioId) _setPendingNextScenarioId;
 
-
+  FlightServices _flightService = FlightServices();
 
   /// Every fresh entry into the chat screen (including navigating back and
   /// re-opening it — see the `autoDispose` on [chatViewModelProvider], which
@@ -145,53 +148,53 @@ class ChatViewModel extends StateNotifier<ChatState> {
     unawaited(_saveChatMessageUseCase(welcome));
   }
 
-  /// The booking that seat/baggage/status/airport requests should apply to:
-  /// the one in progress in the guided post-selection flow, if any,
-  /// otherwise the passenger's last confirmed booking from
-  /// [_bookingSessionStore] (which survives across chat sessions).
-  Booking? get _activeBooking =>
-      state.pendingBooking ?? _bookingSessionStore.confirmedBooking;
+  // /// The booking that seat/baggage/status/airport requests should apply to:
+  // /// the one in progress in the guided post-selection flow, if any,
+  // /// otherwise the passenger's last confirmed booking from
+  // /// [_bookingSessionStore] (which survives across chat sessions).
+  // Booking? get _activeBooking =>
+  //     state.pendingBooking ?? _bookingSessionStore.confirmedBooking;
+  //
+  // /// Triggered by the "Book a Flight" quick action or free text like "I want
+  // /// to book a flight". Searches (demo route) and shows the flight-offers
+  // /// card so the passenger can pick one and enter the guided booking flow.
+  // Future<void> _handleBookFlight() async {
+  //   final offersResult = await _searchFlightsUseCase(
+  //     origin: _demoSearchOrigin,
+  //     destination: _demoSearchDestination,
+  //   );
+  //   offersResult.fold(
+  //     (failure) => _appendError(failure.message),
+  //     (offers) => _appendMessage(
+  //       ChatMessage(
+  //         id: _uuid.v4(),
+  //         role: ChatRole.assistant,
+  //         type: ChatMessageType.flightOffersCard,
+  //         timestamp: DateTime.now(),
+  //         text:
+  //             'Here are a few flight options from Newark to Chicago — pick one to get started.',
+  //         payload: offers,
+  //       ),
+  //     ),
+  //   );
+  // }
 
-  /// Triggered by the "Book a Flight" quick action or free text like "I want
-  /// to book a flight". Searches (demo route) and shows the flight-offers
-  /// card so the passenger can pick one and enter the guided booking flow.
-  Future<void> _handleBookFlight() async {
-    final offersResult = await _searchFlightsUseCase(
-      origin: _demoSearchOrigin,
-      destination: _demoSearchDestination,
-    );
-    offersResult.fold(
-      (failure) => _appendError(failure.message),
-      (offers) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.flightOffersCard,
-          timestamp: DateTime.now(),
-          text:
-              'Here are a few flight options from Newark to Chicago — pick one to get started.',
-          payload: offers,
-        ),
-      ),
-    );
-  }
-
-  /// Called for seat/baggage/status/airport-info requests when there is no
-  /// [_activeBooking] to apply them to — lets the passenger know and offers
-  /// to start a booking instead of guessing at a flight.
-  Future<void> _offerToBookFlight() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: "You don't have a flight booked yet. I can help you book one — "
-            'here are some options:',
-      ),
-    );
-    await _handleBookFlight();
-  }
+  // /// Called for seat/baggage/status/airport-info requests when there is no
+  // /// [_activeBooking] to apply them to — lets the passenger know and offers
+  // /// to start a booking instead of guessing at a flight.
+  // Future<void> _offerToBookFlight() async {
+  //   _appendMessage(
+  //     ChatMessage(
+  //       id: _uuid.v4(),
+  //       role: ChatRole.assistant,
+  //       type: ChatMessageType.text,
+  //       timestamp: DateTime.now(),
+  //       text: "You don't have a flight booked yet. I can help you book one — "
+  //           'here are some options:',
+  //     ),
+  //   );
+  //   await _handleBookFlight();
+  // }
 
   /// Called once the passenger taps "Select" on a [FlightOffersCard] entry.
   /// Books the flight, then kicks off the guided seat → baggage flow that
@@ -261,18 +264,26 @@ class ChatViewModel extends StateNotifier<ChatState> {
       final lastAssistantMessage = state.messages
           .lastWhere(
             (e) => e.role == ChatRole.assistant,
-      )
+          )
           .text;
 
-      final routerResult =
-      await ConversationRouterService.instance.route(
+      final routerResult = await ConversationRouterService.instance.route(
         activeIntent: state.activeIntent!,
         assistantMessage: lastAssistantMessage,
         userMessage: trimmed,
+        context: state.conversationContext.toJson(),
       );
 
       if (routerResult.continueConversation) {
-        await _continueCurrentFlow(trimmed);
+        state = state.copyWith(
+          conversationContext: state.conversationContext.copyWith(
+            data: routerResult.updatedContext,
+          ),
+        );
+
+        await _continueCurrentFlow(
+          routerResult.normalizedPrompt,
+        );
 
         state = state.copyWith(
           status: ChatStatus.idle,
@@ -288,18 +299,15 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
 
 // Normal intent classification
-    final intentResult =
-    await _classifyIntentUseCase(trimmed);
+    final intentResult = await _classifyIntentUseCase(trimmed);
 
     await intentResult.fold(
-          (failure) async => _appendError(failure.message),
-          (intent) async => _handleIntent(intent, trimmed),
+      (failure) async => _appendError(failure.message),
+      (intent) async => _handleIntent(intent, trimmed),
     );
 
     state = state.copyWith(status: ChatStatus.idle);
   }
-
-
 
   /// Looks for a [ProactiveScenario] whose opening line the free-typed
   /// [utterance] is reaching for, so any of the 12 Journey Concierge use
@@ -481,65 +489,18 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
 
     switch (intent.type) {
-      case IntentType.searchFlights:
-        await _handleSearchFlight(intent);
-
-      case IntentType.bookFlight:
-        await _handleBookFlight();
-
-      case IntentType.flightStatus:
-      case IntentType.boardingTime:
-        await _handleFlightStatus();
-
-      case IntentType.seatSelection:
-        await _handleSeatSelection();
-
-      case IntentType.addBaggage:
-      case IntentType.baggageAllowance:
-        await _handleBaggage();
-
-      case IntentType.terminalInformation:
-      case IntentType.counterInformation:
-      case IntentType.airportNavigation:
-        await _handleAirportInfo();
-
       case IntentType.tripDiscovery:
         state = state.copyWith(
           activeIntent: IntentType.tripDiscovery,
+          conversationContext: ConversationContext(
+            data: intent.entities,
+          ),
         );
 
-        await _handleTripDiscovery(intent.originalMessage);
+        await _handleTripDiscovery(
+          intent.originalMessage,
+        );
         break;
-
-      case IntentType.tripRecommendation:
-        await _handleTripRecommendation();
-
-      case IntentType.travelDocuments:
-        await _handleTravelDocuments();
-
-      case IntentType.itineraryOptimization:
-        await _handleItineraryOptimization();
-
-      case IntentType.travelPlanning:
-        await _handleTravelPlanning();
-
-      case IntentType.destinationGuidance:
-        await _handleDestinationGuidance();
-
-      case IntentType.airportAmenities:
-        await _handleAirportAmenities();
-
-      case IntentType.inflightAssistance:
-        await _handleInflightAssistance();
-
-      case IntentType.arrivalAssistance:
-        await _handleArrivalAssistance();
-
-      case IntentType.baggageTracking:
-        await _handleBaggageTracking();
-
-      case IntentType.tripManagement:
-        await _handleTripManagement();
 
       case IntentType.humanAgent:
         await _handleEscalation(utterance);
@@ -547,6 +508,15 @@ class ChatViewModel extends StateNotifier<ChatState> {
       case IntentType.faq:
       case IntentType.unknown:
         await _handleGenericReply(utterance);
+      default:
+        state = state.copyWith(
+          activeIntent: intent.type,
+          conversationContext: ConversationContext(
+            data: intent.entities,
+          ),
+        );
+
+        await _handleOthersRequest(intent);
     }
   }
 
@@ -555,64 +525,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       case IntentType.tripDiscovery:
         await _handleTripDiscovery(message);
         break;
-
-      case IntentType.searchFlights:
-        await _handleSearchFlight(
-          IntentResult(
-            type: IntentType.searchFlights,
-            confidence: 1.0,
-            originalMessage: message,
-          ),
-        );
-        break;
-
-      case IntentType.bookFlight:
-        await _handleBookFlight();
-        break;
-
-      case IntentType.travelDocuments:
-        await _handleTravelDocuments();
-        break;
-
-      case IntentType.travelPlanning:
-        await _handleTravelPlanning();
-        break;
-
-      case IntentType.tripRecommendation:
-        await _handleTripRecommendation();
-        break;
-
-      case IntentType.itineraryOptimization:
-        await _handleItineraryOptimization();
-        break;
-
-      case IntentType.destinationGuidance:
-        await _handleDestinationGuidance();
-        break;
-
-      case IntentType.airportAmenities:
-        await _handleAirportAmenities();
-        break;
-
-      case IntentType.inflightAssistance:
-        await _handleInflightAssistance();
-        break;
-
-      case IntentType.arrivalAssistance:
-        await _handleArrivalAssistance();
-        break;
-
-      case IntentType.baggageTracking:
-        await _handleBaggageTracking();
-        break;
-
-      case IntentType.tripManagement:
-        await _handleTripManagement();
-        break;
-
       default:
-      // Fallback: user is in a non-conversational intent.
-      // Clear the active intent so the next message is classified normally.
         state = state.copyWith(
           clearActiveIntent: true,
         );
@@ -620,476 +533,118 @@ class ChatViewModel extends StateNotifier<ChatState> {
         final intentResult = await _classifyIntentUseCase(message);
 
         await intentResult.fold(
-              (failure) async => _appendError(failure.message),
-              (intent) async => _handleIntent(intent, message),
+          (failure) async => _appendError(failure.message),
+          (intent) async => _handleIntent(intent, message),
         );
     }
   }
 
   Future<void> _handleTripDiscovery(String userMessage) async {
-    try {
-      final result =
-      await TripDiscoveryService.instance.discover(
-        userMessage: userMessage,
-        context: state.tripDiscoveryContext.toJson(),
-      );
-      state = state.copyWith(
-        tripDiscoveryContext: result.tripContext,
-      );
-      print("Trip Context");
-      print(result.tripContext.toJson());
-      // Summary
-      if (result.summary.isNotEmpty) {
-        _appendMessage(
-          ChatMessage(
-            id: _uuid.v4(),
-            role: ChatRole.assistant,
-            type: ChatMessageType.text,
-            timestamp: DateTime.now(),
-            text: result.summary,
-          ),
-        );
-      }
-
-      // Recommendations
-      if (result.recommendations.isNotEmpty) {
-        final recommendationText = result.recommendations
-            .map(
-              (e) => '''
-📍 ${e.destination}, ${e.country}
-
-💡 ${e.reason}
-
-📅 Best Time: ${e.bestTime}
-
-💰 Budget: ${e.estimatedBudget}
-
-🗓 Duration: ${e.idealDuration}
-''',
-            )
-            .join('\n------------------------------\n');
-
-        _appendMessage(
-          ChatMessage(
-            id: _uuid.v4(),
-            role: ChatRole.assistant,
-            type: ChatMessageType.text,
-            timestamp: DateTime.now(),
-            text: recommendationText,
-          ),
-        );
-      }
-
-      // Follow-up question
-      if (result.followUpQuestion.isNotEmpty) {
-        _appendMessage(
-          ChatMessage(
-            id: _uuid.v4(),
-            role: ChatRole.assistant,
-            type: ChatMessageType.text,
-            timestamp: DateTime.now(),
-            text: result.followUpQuestion,
-          ),
-        );
-      }
-    } catch (e) {
-      _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.text,
-          timestamp: DateTime.now(),
-          text: "Sorry, something went wrong while discovering trips.",
-        ),
-      );
-    }
+    // try {
+//       final result = await TripDiscoveryService.instance.discover(
+//         userMessage: userMessage,
+//         context: state.conversationContext.toJson(),
+//       );
+//
+//       state = state.copyWith(
+//         conversationContext: ConversationContext.fromJson(
+//           result.tripContext.toJson(),
+//         ),
+//       );
+//       print("Trip Context");
+//       print(result.tripContext.toJson());
+//       // Summary
+//       if (result.summary.isNotEmpty) {
+//         _appendMessage(
+//           ChatMessage(
+//             id: _uuid.v4(),
+//             role: ChatRole.assistant,
+//             type: ChatMessageType.text,
+//             timestamp: DateTime.now(),
+//             text: result.summary,
+//           ),
+//         );
+//       }
+//
+//       // Recommendations
+//       if (result.recommendations.isNotEmpty) {
+//         final recommendationText = result.recommendations
+//             .map(
+//               (e) => '''
+// 📍 ${e.destination}, ${e.country}
+//
+// 💡 ${e.reason}
+//
+// 📅 Best Time: ${e.bestTime}
+//
+// 💰 Budget: ${e.estimatedBudget}
+//
+// 🗓 Duration: ${e.idealDuration}
+// ''',
+//             )
+//             .join('\n------------------------------\n');
+//
+//         _appendMessage(
+//           ChatMessage(
+//             id: _uuid.v4(),
+//             role: ChatRole.assistant,
+//             type: ChatMessageType.text,
+//             timestamp: DateTime.now(),
+//             text: recommendationText,
+//           ),
+//         );
+//       }
+//
+//       // Follow-up question
+//       if (result.followUpQuestion.isNotEmpty) {
+//         _appendMessage(
+//           ChatMessage(
+//             id: _uuid.v4(),
+//             role: ChatRole.assistant,
+//             type: ChatMessageType.text,
+//             timestamp: DateTime.now(),
+//             text: result.followUpQuestion,
+//           ),
+//         );
+//       }
+//     } catch (e) {
+//       _appendMessage(
+//         ChatMessage(
+//           id: _uuid.v4(),
+//           role: ChatRole.assistant,
+//           type: ChatMessageType.text,
+//           timestamp: DateTime.now(),
+//           text: "Sorry, something went wrong while discovering trips.",
+//         ),
+//       );
+//     }
   }
 
-  Future<void> _handleTripRecommendation() async {
+  Future<void> _handleOthersRequest(IntentResult intent) async {
+    print(intent.originalMessage);
+    var response = await _flightService.getFlightResponse(intent.qnPromt);
+
+    final backendData = Map<String, dynamic>.from(
+      response['data'] as Map,
+    );
+
+    final suggestionsData = backendData['suggestions'];
+
+    final humanized = await ResponseHumanizerService.instance.humanize(
+      userMessage: intent.originalMessage,
+      backendResponse: backendData,
+      suggestions: suggestionsData is List
+          ? suggestionsData.map((e) => e.toString()).toList()
+          : <String>[],
+    );
+
     _appendMessage(
       ChatMessage(
         id: _uuid.v4(),
         role: ChatRole.assistant,
         type: ChatMessageType.text,
         timestamp: DateTime.now(),
-        text: 'Trip recommendation request received.',
-      ),
-    );
-  }
-
-  Future<void> _handleTravelDocuments() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Travel document assistance requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleItineraryOptimization() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Itinerary optimization requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleTravelPlanning() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Travel planning assistance requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleDestinationGuidance() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Destination guidance requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleAirportAmenities() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Airport amenities information requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleInflightAssistance() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'In-flight assistance requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleArrivalAssistance() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Arrival assistance requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleBaggageTracking() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Baggage tracking requested.',
-      ),
-    );
-  }
-
-  Future<void> _handleTripManagement() async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Trip management request received.',
-      ),
-    );
-  }
-
-  Future<void> _handleSearchFlight(IntentResult intent) async {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Search Flights received',
-      ),
-    );
-  }
-
-  Future<void> _handleFlightStatus() async {
-    final booking = _activeBooking;
-    if (booking == null) {
-      await _offerToBookFlight();
-      return;
-    }
-    final result = await _getFlightStatusUseCase(booking.flight.flightNumber);
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (flight) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.flightStatusCard,
-          timestamp: DateTime.now(),
-          text: 'Here is the latest status for ${flight.flightNumber}.',
-          payload: flight,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _handleSeatSelection() async {
-    final booking = _activeBooking;
-    if (booking == null) {
-      await _offerToBookFlight();
-      return;
-    }
-    _appendFlightInfo(booking);
-    final result = await _getSeatMapUseCase(booking.flight.flightNumber);
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (seatMap) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.seatMapCard,
-          timestamp: DateTime.now(),
-          text: 'Pick a seat below — window seats are highlighted.',
-          payload: seatMap,
-        ),
-      ),
-    );
-  }
-
-  /// A short text card recapping which flight a seat-map/baggage request
-  /// applies to — shown so the passenger can confirm it's the right one
-  /// before picking a seat or bag.
-  void _appendFlightInfo(Booking booking) {
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: 'Flight ${booking.flight.flightNumber}: '
-            '${booking.flight.origin} → ${booking.flight.destination} · PNR ${booking.pnr}.',
-      ),
-    );
-  }
-
-  /// Called by the seat-selection UI once the passenger taps a seat. Applies
-  /// to whichever booking is active: the one just made via
-  /// [selectFlightOffer], if the guided flow is in progress, otherwise the
-  /// passenger's last confirmed booking.
-  Future<void> confirmSeatChange(String seatNumber) async {
-    state = state.copyWith(status: ChatStatus.sendingMessage);
-    final pendingBooking = state.pendingBooking;
-    final activeBooking = _activeBooking;
-    final result = await _changeSeatUseCase(
-      pnr: activeBooking?.pnr ?? _demoPnr,
-      flightNumber: activeBooking?.flight.flightNumber ?? _demoFlightNumber,
-      seatNumber: seatNumber,
-    );
-    await result.fold(
-      (failure) async => _appendError(failure.message),
-      (seat) async {
-        if (pendingBooking != null) {
-          state = state.copyWith(pendingSeatNumber: seat.seatNumber);
-          _appendMessage(
-            ChatMessage(
-              id: _uuid.v4(),
-              role: ChatRole.assistant,
-              type: ChatMessageType.text,
-              timestamp: DateTime.now(),
-              text:
-                  'Seat ${seat.seatNumber} confirmed. ✅ Want to add any baggage?',
-            ),
-          );
-          await _showBaggageOptions(pendingBooking.flight.flightNumber);
-        } else {
-          _appendMessage(
-            ChatMessage(
-              id: _uuid.v4(),
-              role: ChatRole.assistant,
-              type: ChatMessageType.text,
-              timestamp: DateTime.now(),
-              text: 'You are all set in seat ${seat.seatNumber}. ✅',
-            ),
-          );
-        }
-      },
-    );
-    state = state.copyWith(status: ChatStatus.idle);
-  }
-
-  /// Called from "Skip" on [SeatMapCard] while the guided post-booking flow
-  /// is active — leaves the seat unassigned and moves straight to baggage
-  /// options, same as [confirmSeatChange] does after a seat is picked.
-  Future<void> skipSeatSelection() async {
-    final booking = state.pendingBooking;
-    if (booking == null) return;
-    state = state.copyWith(status: ChatStatus.sendingMessage);
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text:
-            "No problem — we'll assign a seat later. Want to add any baggage?",
-      ),
-    );
-    await _showBaggageOptions(booking.flight.flightNumber);
-    state = state.copyWith(status: ChatStatus.idle);
-  }
-
-  Future<void> _handleBaggage() async {
-    final booking = _activeBooking;
-    if (booking == null) {
-      await _offerToBookFlight();
-      return;
-    }
-    _appendFlightInfo(booking);
-    await _showBaggageOptions(booking.flight.flightNumber);
-  }
-
-  Future<void> _showBaggageOptions(String flightNumber) async {
-    final result = await _getBaggageOptionsUseCase(flightNumber);
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (options) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.baggageOptionsCard,
-          timestamp: DateTime.now(),
-          text: 'Here are your extra baggage options.',
-          payload: options,
-        ),
-      ),
-    );
-  }
-
-  /// Called by the baggage UI once the passenger picks an option. Applies to
-  /// the active booking's PNR the same way [confirmSeatChange] does.
-  Future<void> confirmBaggagePurchase(String optionId) async {
-    state = state.copyWith(status: ChatStatus.sendingMessage);
-    final booking = state.pendingBooking;
-    final pnr = _activeBooking?.pnr ?? _demoPnr;
-    final result = await _purchaseBaggageUseCase(pnr: pnr, optionId: optionId);
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (purchase) {
-        if (booking != null) {
-          state = state.copyWith(
-            pendingBaggagePurchases: [
-              ...state.pendingBaggagePurchases,
-              purchase
-            ],
-          );
-        }
-        _appendMessage(
-          ChatMessage(
-            id: _uuid.v4(),
-            role: ChatRole.assistant,
-            type: ChatMessageType.baggageSuccessCard,
-            timestamp: DateTime.now(),
-            text: 'Your extra baggage is confirmed.',
-            payload: purchase,
-          ),
-        );
-      },
-    );
-    state = state.copyWith(status: ChatStatus.idle);
-  }
-
-  /// Called from the "Add more baggage" action on [BaggageSuccessCard] while
-  /// the guided flow is active — re-shows the baggage options so the
-  /// passenger can add another bag.
-  Future<void> addMoreBaggage() async {
-    final booking = state.pendingBooking;
-    if (booking == null) return;
-    state = state.copyWith(status: ChatStatus.sendingMessage);
-    await _showBaggageOptions(booking.flight.flightNumber);
-    state = state.copyWith(status: ChatStatus.idle);
-  }
-
-  /// Called from the "Skip"/"Finish" actions on the baggage cards once the
-  /// passenger is done adding bags — renders the complete itinerary,
-  /// including terminal/gate/boarding info, closes out the guided flow, and
-  /// remembers this as the passenger's confirmed booking for future chat
-  /// sessions (see [BookingSessionStore]).
-  Future<void> finishBooking() async {
-    final booking = state.pendingBooking;
-    if (booking == null) return;
-
-    final extraBaggageKg = state.pendingBaggagePurchases
-        .fold<num>(0, (sum, purchase) => sum + purchase.option.extraWeightKg);
-
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.bookingConfirmationCard,
-        timestamp: DateTime.now(),
-        text: "You're all set! Here's your complete itinerary.",
-        payload: BookingSummary(
-          booking: booking,
-          seatNumber: state.pendingSeatNumber,
-          extraBaggageKg: extraBaggageKg,
-        ),
-      ),
-    );
-    _bookingSessionStore.confirmedBooking = booking;
-    state = state.copyWith(
-      clearPendingBooking: true,
-      clearPendingSeatNumber: true,
-      pendingBaggagePurchases: const [],
-    );
-  }
-
-  Future<void> _handleAirportInfo() async {
-    final booking = _activeBooking;
-    if (booking == null) {
-      await _offerToBookFlight();
-      return;
-    }
-    final result = await _getAirportDetailsUseCase(
-      flightNumber: booking.flight.flightNumber,
-      airportCode: booking.flight.origin,
-    );
-    result.fold(
-      (failure) => _appendError(failure.message),
-      (info) => _appendMessage(
-        ChatMessage(
-          id: _uuid.v4(),
-          role: ChatRole.assistant,
-          type: ChatMessageType.airportInfoCard,
-          timestamp: DateTime.now(),
-          text: 'Here is how to get to your gate.',
-          payload: info,
-        ),
+        text: humanized.message,
       ),
     );
   }

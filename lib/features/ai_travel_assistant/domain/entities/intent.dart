@@ -38,7 +38,8 @@ class IntentResult extends Equatable {
     required this.type,
     required this.confidence,
     this.entities = const {},
-    this.originalMessage=''
+    this.originalMessage='',
+    this.qnPromt=''
 
   });
 
@@ -54,6 +55,7 @@ class IntentResult extends Equatable {
 
   bool get isLowConfidence => confidence < lowConfidenceThreshold;
   final String originalMessage;
+  final String qnPromt;
 
   @override
   List<Object?> get props => [type, confidence, entities];

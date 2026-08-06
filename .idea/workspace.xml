@@ -4,120 +4,33 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="907f544c-d51b-452a-add6-5b1b5b7d9730" name="Changes" comment="">
+    <list default="true" id="57639adf-53cb-45a3-883b-5bc128f4f571" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/lib/core/services/ai_services/humanized_response_service/humanized_response_service_promt.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/core/services/ai_services/humanized_response_service/response_humanizer_service.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/core/services/api_services/api_service.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/humanised_response.dart" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/services/flight_services.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/libraries/Flutter_Plugins.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/libraries/Flutter_Plugins.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/di/providers.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/di/providers.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/errors/exceptions.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/errors/exceptions.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/errors/failures.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/errors/failures.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/navigation/app_navigator_key.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/navigation/app_navigator_key.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/services/concierge_visibility_store.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/concierge_visibility_store.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/services/local_notification_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/local_notification_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/services/query_intent_ai_service.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/services/reminder_delay_store.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/reminder_delay_store.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/services/shared_preferences_provider.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/shared_preferences_provider.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/services/voice_output_setting_store.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/voice_output_setting_store.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/theme/app_theme.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/theme/app_theme.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/utils/result.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/utils/result.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/core/utils/safe_call.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/utils/safe_call.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/agent_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/agent_remote_datasource.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/airport_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/airport_remote_datasource.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/baggage_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/baggage_remote_datasource.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_local_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_local_datasource.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/chat_remote_datasource.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/flight_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/flight_remote_datasource.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/seat_remote_datasource.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/datasource/seat_remote_datasource.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/airport_info_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/airport_info_model.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/airport_info_model.freezed.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/airport_info_model.freezed.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/airport_info_model.g.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/airport_info_model.g.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/baggage_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/baggage_model.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/baggage_model.freezed.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/baggage_model.freezed.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/baggage_model.g.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/baggage_model.g.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/booking_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/booking_model.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/booking_model.freezed.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/booking_model.freezed.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/booking_model.g.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/booking_model.g.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/chat_message_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/chat_message_model.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/chat_message_model.freezed.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/chat_message_model.freezed.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/chat_message_model.g.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/chat_message_model.g.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.freezed.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.freezed.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.g.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_model.g.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_offer_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_offer_model.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_offer_model.freezed.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_offer_model.freezed.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_offer_model.g.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/flight_offer_model.g.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/seat_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/seat_model.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/seat_model.freezed.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/seat_model.freezed.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/seat_model.g.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/seat_model.g.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/agent_repository_impl.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/agent_repository_impl.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/airport_repository_impl.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/airport_repository_impl.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/baggage_repository_impl.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/baggage_repository_impl.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/chat_history_repository_impl.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/chat_history_repository_impl.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/chat_repository_impl.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/chat_repository_impl.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/flight_repository_impl.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/flight_repository_impl.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/seat_repository_impl.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/repositories/seat_repository_impl.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/action_summary.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/action_summary.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/agent_escalation.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/agent_escalation.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/airport_info.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/airport_info.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/baggage.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/baggage.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/booking.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/booking.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/booking_summary.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/booking_summary.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/chat_message.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/chat_message.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/flight.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/flight.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/flight_offer.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/flight_offer.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ai_travel_assistant.iml" beforeDir="false" afterPath="$PROJECT_DIR$/ai_travel_assistant.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_route_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_router_result.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversation_router_result.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversational_route_promt.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/conversation_route/conversational_route_promt.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/query_intent_ai_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/query_intent_ai_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_promt.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_promt.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/services/ai_services/trip_discovery/trip_discovery_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_discovery_context.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_discovery_context.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_discovery_result_model.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_discovery_result_model.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_profile.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_profile.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/trip_discovery/trip_recomendation.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/data/models/conersation_route/trip_recomendation.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/intent.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/seat.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/entities/seat.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/agent_repository.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/agent_repository.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/airport_repository.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/airport_repository.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/baggage_repository.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/baggage_repository.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/chat_history_repository.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/chat_history_repository.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/chat_repository.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/chat_repository.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/flight_repository.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/flight_repository.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/seat_repository.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/repositories/seat_repository.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/book_flight_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/book_flight_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/classify_intent_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/classify_intent_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/escalate_to_agent_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/escalate_to_agent_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_airport_details_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_airport_details_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_baggage_options_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_baggage_options_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_flight_status_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_flight_status_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_seat_map_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/get_seat_map_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/search_flights_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/search_flights_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/pages/chat_page.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/pages/chat_page.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/booking_session_store.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/booking_session_store.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/action_summary_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/action_summary_card.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/airport/airport_info_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/airport/airport_info_card.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/chat_bubble.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/chat_bubble.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/chat_header.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/chat_header.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmation_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmation_card.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/flight/flight_offers_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/flight/flight_offers_card.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/flight/flight_status_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/flight/flight_status_card.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/markdown_message.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/markdown_message.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/message_composer.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/message_composer.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/rich_card_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/rich_card_widget.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/seat_map/seat_map_card.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/seat_map/seat_map_card.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/seat_map/seat_tile.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/seat_map/seat_tile.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/typing_indicator.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/widgets/typing_indicator.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/routes/ai_travel_assistant_routes.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/routes/ai_travel_assistant_routes.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/mock_backend/mock_backend_server.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/voice_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/ai_travel_assistant/services/voice_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/data/scenario_catalog.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/data/scenario_catalog.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/domain/entities/proactive_scenario.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/domain/entities/proactive_scenario.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/pages/scenario_chat_page.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/pages/scenario_chat_page.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/viewmodels/scenario_chat_state.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/viewmodels/scenario_chat_state.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/viewmodels/scenario_chat_viewmodel.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/viewmodels/scenario_chat_viewmodel.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/concierge_moments_list.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/concierge_moments_list.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/notification_banner.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/notification_banner.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/proactive_feed_list.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/proactive_feed_list.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/suggested_reply_chip.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/concierge_demo/presentation/widgets/suggested_reply_chip.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/landing/presentation/pages/landing_page.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/landing/presentation/pages/landing_page.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/features/settings/presentation/pages/more_page.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/features/settings/presentation/pages/more_page.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/main.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -127,91 +40,53 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="FileEditorManager">
-    <leaf>
-      <file leaf-file-name="main.dart" pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/lib/main.dart">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="0">
-              <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-    </leaf>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Dart File" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory">{
-  &quot;lastFilter&quot;: {
-    &quot;state&quot;: &quot;OPEN&quot;,
-    &quot;assignee&quot;: &quot;chandanpradhan-netizen&quot;
-  }
-}</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/coforge-manoj/travelbuddy.git&quot;,
-    &quot;accountId&quot;: &quot;94c383f1-4aa1-4230-9fef-946bc169d96d&quot;
-  }
-}</component>
   <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 3
+  &quot;associatedIndex&quot;: 5,
+  &quot;fromUser&quot;: false
 }</component>
-  <component name="ProjectId" id="3HG8gX7Ojp6C1DbkYwYApxeJuxG" />
-  <component name="ProjectView">
-    <navigator currentView="ProjectPane" proportions="" version="1" />
-    <panes>
-      <pane id="ProjectPane">
-        <option name="show-excluded-files" value="false" />
-      </pane>
-    </panes>
-  </component>
+  <component name="ProjectId" id="3HWrRSy3mU3EJVrQqBFDuwfqQRM" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Flutter.main.dart.executor&quot;: &quot;Debug&quot;,
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
-    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
-    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;intractice__usecase__query__inten__filter&quot;,
-    &quot;io.flutter.reload.alreadyRun&quot;: &quot;true&quot;,
-    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Flutter.main.dart.executor": "Debug",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "ToolWindow.Running Devices.ShowToolbar": "false",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "dart.analysis.tool.window.visible": "false",
+    "git-widget-placeholder": "intractice__usecase__query__inten__filter",
+    "io.flutter.project.isFirstOpen": "true",
+    "io.flutter.reload.alreadyRun": "true",
+    "kotlin-language-version-configured": "true",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "show.migrate.to.gradle.popup": "false"
   }
-}</component>
+}]]></component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="907f544c-d51b-452a-add6-5b1b5b7d9730" name="Changes" comment="" />
-      <created>1785483159076</created>
+      <changelist id="57639adf-53cb-45a3-883b-5bc128f4f571" name="Changes" comment="" />
+      <created>1785994659229</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1785483159076</updated>
+      <updated>1785994659229</updated>
     </task>
     <servers />
-  </component>
-  <component name="ToolWindowManager">
-    <editor active="true" />
-    <layout>
-      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
-    </layout>
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" type="Dart">
-          <url>file://$PROJECT_DIR$/lib/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart</url>
-          <line>274</line>
-          <option name="timeStamp" value="1" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>

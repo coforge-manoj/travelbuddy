@@ -25,8 +25,39 @@ class ConversationRouterService {
     required IntentType activeIntent,
     required String assistantMessage,
     required String userMessage,
+    required Map<String, dynamic> context,
   }) async {
     try {
+      final messages = <Map<String, String>>[
+        {
+          "role": "system",
+          "content": ConversationRouterPrompt.systemPrompt,
+        },
+        {
+          "role": "system",
+          "content":
+          "Current Active Intent:\n${activeIntent.name}",
+        },
+      ];
+
+      if (context.isNotEmpty) {
+        messages.add({
+          "role": "system",
+          "content":
+          "Current Context:\n${jsonEncode(context)}",
+        });
+      }
+
+      messages.add({
+        "role": "assistant",
+        "content": assistantMessage,
+      });
+
+      messages.add({
+        "role": "user",
+        "content": userMessage,
+      });
+
       final response = await http.post(
         Uri.parse(_apiUrl),
         headers: {
@@ -36,25 +67,7 @@ class ConversationRouterService {
         body: jsonEncode({
           "model": _model,
           "temperature": 0,
-          "messages": [
-            {
-              "role": "system",
-              "content": ConversationRouterPrompt.systemPrompt,
-            },
-            {
-              "role": "user",
-              "content": """
-Current Active Intent:
-${activeIntent.name}
-
-Assistant Previous Message:
-$assistantMessage
-
-User Message:
-$userMessage
-"""
-            }
-          ]
+          "messages": messages,
         }),
       );
 
@@ -66,21 +79,26 @@ $userMessage
       jsonDecode(response.body) as Map<String, dynamic>;
 
       final content =
-      body["choices"][0]["message"]["content"].toString();
+      body["choices"][0]["message"]["content"]
+          .toString();
+
+      print("=== ROUTER RESPONSE ===");
+      print(content);
 
       final json = AiJsonParser.parseObject(content);
-
+      print("ROUTER PARSED");
       return ConversationRouterResult.fromJson(json);
     } catch (e) {
-      print("ConversationRouterService");
+      print("ConversationRouterService Error");
       print(e);
 
-      /// safest behaviour
-      /// if router fails,
-      /// let classifier decide
       return const ConversationRouterResult(
         continueConversation: false,
+        requiresReclassification: true,
+        normalizedPrompt: '',
+        updatedContext: {},
       );
     }
   }
+
 }

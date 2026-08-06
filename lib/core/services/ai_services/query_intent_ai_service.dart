@@ -47,7 +47,8 @@ Schema:
 {
   "action": "",
   "confidence": 0.0,
-  "entities": {}
+  "entities": {},
+  "qnPrompt": ""
 }
 
 Allowed actions:
@@ -215,6 +216,22 @@ Rules:
 6. Return only JSON.
 7. No markdown.
 8. No explanation.
+9. For searchFlights always generate qnPrompt.
+
+Format:
+
+If source and destination available:
+"flights from {source} to {destination}"
+
+If date is available:
+"flights from {source} to {destination} on {yyyy-MM-dd}"
+
+Use airport codes when confidently known:
+Dallas -> DFW
+London Heathrow -> LHR
+New York JFK -> JFK
+
+If source or destination is missing, keep qnPrompt empty.
 
 Examples:
 
@@ -490,6 +507,20 @@ Output:
 }
 
 Input:
+Show available flights from Dallas to London on June 10 2027
+
+Output:
+{
+  "action":"searchFlights",
+  "confidence":0.99,
+  "entities":{
+    "source":"DFW",
+    "destination":"LHR",
+    "date":"2027-06-10"
+  },
+  "qnPrompt":"flights from DFW to LHR on 2027-06-10"
+}
+Input:
 Show available flights from Delhi to Mumbai.
 
 Output:
@@ -657,6 +688,7 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
           ),
         ) ??
             const {},
+        qnPromt: result['qnPrompt']?.toString() ?? '',
       );
     } catch (e) {
       print('QueryUnderstandingService Error: $e');

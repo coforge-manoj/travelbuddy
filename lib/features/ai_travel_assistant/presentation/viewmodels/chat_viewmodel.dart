@@ -7,6 +7,7 @@ import 'package:ai_travel_assistant/core/di/providers.dart';
 import 'package:ai_travel_assistant/core/services/local_notification_service.dart';
 import 'package:ai_travel_assistant/core/services/reminder_delay_store.dart';
 import 'package:ai_travel_assistant/core/services/voice_output_setting_store.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/flight_list_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
@@ -629,6 +630,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
     );
 
     final suggestionsData = backendData['suggestions'];
+    final reply = backendData['reply']?.toString() ?? '';
 
     final humanized = await ResponseHumanizerService.instance.humanize(
       userMessage: intent.originalMessage,
@@ -644,9 +646,31 @@ class ChatViewModel extends StateNotifier<ChatState> {
         role: ChatRole.assistant,
         type: ChatMessageType.text,
         timestamp: DateTime.now(),
-        text: humanized.message,
+        text: reply.isNotEmpty ? reply : humanized.message,
       ),
+      speakAs: humanized.message,
     );
+
+    // TravelBuddy search_flights responses include a flight_list card — surface
+    // it as the existing flight-offers rich card when intent matches.
+    if (intent.type == IntentType.searchFlights &&
+        FlightListCardMapper.isSearchFlightsTool(
+          backendData['tool']?.toString(),
+        )) {
+      final offers = FlightListCardMapper.fromCards(backendData['cards']);
+      if (offers.isNotEmpty) {
+        _appendMessage(
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatRole.assistant,
+            type: ChatMessageType.flightOffersCard,
+            timestamp: DateTime.now(),
+            text: reply.isNotEmpty ? reply : humanized.message,
+            payload: offers,
+          ),
+        );
+      }
+    }
   }
 
   void _appendEscalationOffer() {
@@ -731,7 +755,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
     super.dispose();
   }
 
-  void _appendMessage(ChatMessage message) {
+  void _appendMessage(ChatMessage message, {String? speakAs}) {
     state = state.copyWith(messages: [...state.messages, message]);
     unawaited(_saveChatMessageUseCase(message));
 
@@ -739,7 +763,9 @@ class ChatViewModel extends StateNotifier<ChatState> {
         message.type == ChatMessageType.text &&
         state.isVoiceOutputEnabled;
     if (shouldSpeak) {
-      unawaited(_speakSafely(message.text));
+      final speechText =
+          (speakAs != null && speakAs.trim().isNotEmpty) ? speakAs : message.text;
+      unawaited(_speakSafely(speechText));
     }
   }
 

@@ -15,6 +15,13 @@ class FlightOffer extends Equatable {
     required this.price,
     this.currency = 'USD',
     this.stops = 0,
+    this.aircraft,
+    this.seatsLeft,
+    this.durationLabel,
+    this.recommended = false,
+    this.lowest = false,
+    this.arrivesNextDay = false,
+    this.cabinPrices = const {},
   });
 
   final String id;
@@ -27,6 +34,23 @@ class FlightOffer extends Equatable {
   final num price;
   final String currency;
   final int stops;
+
+  /// Aircraft type from TravelBuddy `flight_list` (e.g. `B777-300ER`).
+  final String? aircraft;
+
+  /// Remaining seats reported by the search API.
+  final int? seatsLeft;
+
+  /// Human-readable duration from the API (e.g. `9h05`), preferred over
+  /// [duration] when present so display matches the backend exactly.
+  final String? durationLabel;
+
+  final bool recommended;
+  final bool lowest;
+  final bool arrivesNextDay;
+
+  /// Cabin → price map from `cabin_prices` on a `flight_list` item.
+  final Map<String, num> cabinPrices;
 
   bool get isNonstop => stops == 0;
 
@@ -44,5 +68,12 @@ class FlightOffer extends Equatable {
         price,
         currency,
         stops,
+        aircraft,
+        seatsLeft,
+        durationLabel,
+        recommended,
+        lowest,
+        arrivesNextDay,
+        cabinPrices,
       ];
 }

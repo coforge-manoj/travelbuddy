@@ -18,9 +18,9 @@ class QueryUnderstandingService {
     try {
       if (input.trim().isEmpty) {
         return  IntentResult(
-          type: IntentType.unknown,
-          confidence: 0.0,
-          originalMessage: input
+            type: IntentType.unknown,
+            confidence: 0.0,
+            originalMessage: input
         );
       }
 
@@ -84,6 +84,38 @@ Intent Definitions:
   show or search available flights between locations.
   Includes flight options, schedules, departures,
   arrivals and available routes.
+
+
+
+- bookFlight:
+  User wants to book, reserve, confirm or purchase
+  a specific flight.
+
+  This intent should be selected only when the
+  user has already chosen a particular flight,
+  OR a flight number is available,
+  OR the conversation context contains a selected flight.
+
+  Examples:
+
+  book AA2556
+
+  yes book it
+
+  confirm booking
+
+  reserve this flight
+
+  proceed with booking
+
+  yes book now
+
+  book the recommended flight
+
+  confirm AA2556
+
+  purchase this ticket
+
 
 - flightStatus:
   Flight status, delay, cancellation, departure status,
@@ -218,20 +250,153 @@ Rules:
 8. No explanation.
 9. For searchFlights always generate qnPrompt.
 
-Format:
+BOOKING RULES
 
-If source and destination available:
-"flights from {source} to {destination}"
+If the user's message indicates they want to confirm or proceed with
+booking a specific flight, classify it as:
 
-If date is available:
-"flights from {source} to {destination} on {yyyy-MM-dd}"
+action = "bookFlight"
 
-Use airport codes when confidently known:
+Examples include:
+
+- book
+- book now
+- yes
+- yes please
+- proceed
+- proceed with booking
+- reserve it
+- confirm booking
+- purchase ticket
+- book AA2556
+- book the recommended flight
+- confirm AA2556
+
+If a flightNumber is available in the message
+or conversation context:
+
+entities:
+
+{
+   "flightNumber":"AA2556"
+}
+
+Generate:
+
+"qnPrompt":"book it"
+
+Never generate a flight search prompt.
+
+Never use:
+
+flights from XXX to YYY
+
+when action == bookFlight.
+
+==========================
+QNPROMPT GENERATION RULES
+==========================
+
+The qnPrompt is used by the flight search API.
+
+Always generate qnPrompt in one of these formats:
+
+Without date:
+"flights from {origin} to {destination}"
+
+With date:
+"flights from {origin} to {destination} on {yyyy-MM-dd}"
+
+LOCATION NORMALIZATION
+
+Whenever possible, convert locations to their official IATA airport codes.
+
+Priority:
+1. Airport name
+2. Airport code
+3. City
+4. Otherwise keep original text
+
+If the user explicitly mentions an airport, convert it to its IATA code.
+Examples:
+London Heathrow Airport -> LHR
+John F. Kennedy Airport -> JFK
+Indira Gandhi International Airport -> DEL
+Chhatrapati Shivaji Airport -> BOM
+Kempegowda Airport -> BLR
+Dubai International Airport -> DXB
+Singapore Changi Airport -> SIN
+
+If the user already provides an IATA airport code, preserve it exactly.
+
+If the user provides only a city and the city has one commonly accepted primary airport, replace the city with its IATA airport code.
+Examples:
+Delhi -> DEL
+Mumbai -> BOM
+Bengaluru/Bangalore -> BLR
+Chennai -> MAA
+Hyderabad -> HYD
+Kolkata -> CCU
+Pune -> PNQ
+Ahmedabad -> AMD
+Dubai -> DXB
+Abu Dhabi -> AUH
+Doha -> DOH
+Singapore -> SIN
+Bangkok -> BKK
+Paris -> CDG
+Frankfurt -> FRA
+Amsterdam -> AMS
+Los Angeles -> LAX
+San Francisco -> SFO
+San Diego -> SAN
+Seattle -> SEA
+Chicago -> ORD
 Dallas -> DFW
-London Heathrow -> LHR
-New York JFK -> JFK
+Atlanta -> ATL
+Miami -> MIA
+Sydney -> SYD
+Melbourne -> MEL
+London -> LHR
+California -> LAX
+Texas -> DFW
+Florida -> MIA
+Japan -> HND
+India -> DEL
+England -> LHR
+Paris -> CDG
+New York -> JFK
 
-If source or destination is missing, keep qnPrompt empty.
+Never guess when a city has multiple major airports.
+Keep the original city name.
+Examples:
+London
+New York
+Milan
+Moscow
+Berlin
+
+Never convert states, regions or countries into airport codes.
+Examples:
+California
+Texas
+England
+India
+Japan
+Europe
+
+Flights from London to California
+-> flights from London to California
+
+If a location cannot confidently be mapped, keep the original text.
+
+If either source or destination is missing, keep qnPrompt empty.
+
+If a date exists, append: on yyyy-MM-dd.
+
+Never invent airport codes.
+Never guess between multiple airports.
+Only use airport codes when the mapping is confident.
 
 Examples:
 
@@ -433,6 +598,50 @@ Output:
 }
 
 Input:
+
+book flight AA2556 from DEL to MIA on 2026-08-25
+
+Output:
+
+{
+  "action":"bookFlight",
+  "confidence":0.99,
+  "entities":{
+      "flightNumber":"AA2556",
+      "source":"DEL",
+      "destination":"MIA",
+      "date":"2026-08-25"
+  },
+  "qnPrompt":"book it"
+}
+Input:
+
+Book AA2556
+
+Output:
+
+{
+  "action":"bookFlight",
+  "confidence":0.99,
+  "entities":{
+      "flightNumber":"AA2556"
+  },
+  "qnPrompt":"book it"
+}
+Input:
+
+Yes, book now.
+
+Output:
+
+{
+  "action":"bookFlight",
+  "confidence":0.98,
+  "entities":{},
+  "qnPrompt":"book it"
+}
+
+Input:
 What entertainment options are available for kids onboard?
 
 Output:
@@ -528,9 +737,10 @@ Output:
   "action":"searchFlights",
   "confidence":0.99,
   "entities":{
-    "source":"Delhi",
-    "destination":"Mumbai"
-  }
+    "source":"DEL",
+    "destination":"BOM"
+  },
+  "qnPrompt":"flights from DEL to BOM"
 }
 
 Input:
@@ -672,7 +882,7 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
       jsonDecode(cleanedContent) as Map<String, dynamic>;
 
       return IntentResult(
-          originalMessage: input,
+        originalMessage: input,
         type: _parseIntent(
           result['action']?.toString(),
         ),
@@ -694,8 +904,8 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
       print('QueryUnderstandingService Error: $e');
 
       return  IntentResult(
-        type: IntentType.unknown,
-        confidence: 0.0,
+          type: IntentType.unknown,
+          confidence: 0.0,
           originalMessage: input
       );
     }
@@ -768,6 +978,8 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
 
       case 'tripManagement':
         return IntentType.tripManagement;
+      case 'bookFlight':
+        return IntentType.bookFlight;
 
       default:
         return IntentType.unknown;

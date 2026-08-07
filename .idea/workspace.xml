@@ -6,7 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="57639adf-53cb-45a3-883b-5bc128f4f571" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/res/drawable/splash_logo.png.png" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/res/drawable/splash_logo.png" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

@@ -20,6 +20,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 /// amounts sometimes objects and sometimes bare numbers. Treat these as the
 /// contract until a newer capture replaces them.
 void main() {
+  _followUpTests();
+
   group('live journey payloads', () {
     test('5. booking_confirmed — camelCase flight, payment block, miles earned',
         () {
@@ -346,6 +348,80 @@ void main() {
       // No explicit total — it has to come from summing the split.
       expect(cancellation.effectiveRefundTotal, 1038);
       expect(cancellation.reason, 'Card refunds settle in 5-7 business days.');
+    });
+  });
+}
+
+/// Which turns earn follow-up chips. The backend attaches its stock
+/// suggestions to every turn regardless of outcome, so the client decides.
+void _followUpTests() {
+  group('follow-up suggestions', () {
+    test('a clarification turn shows none, even though the backend sent some',
+        () {
+      // Verbatim from POST /chat "search for flight to london" on
+      // 2026-08-07 — no flights found, yet it offers to book one.
+      final followUps = ChatCardMapper.followUpsFrom({
+        'reply': 'I need an origin, a destination and a date.',
+        'tool': 'search_flights',
+        'cards': <Object>[],
+        'suggestions': ['Book the recommended one', 'Show me cheaper options'],
+        'needsConfirmation': false,
+      });
+
+      expect(followUps, isEmpty);
+    });
+
+    test('a turn with results keeps its chips', () {
+      final followUps = ChatCardMapper.followUpsFrom({
+        'cards': [
+          {'type': 'flight_list', 'flights': <Object>[]},
+        ],
+        'suggestions': ['Book the recommended one', 'Show me cheaper options'],
+      });
+
+      expect(followUps, hasLength(2));
+    });
+
+    test('a confirmation turn keeps its chips even with no card', () {
+      // "cancel my booking" comes back reply-only, awaiting a yes.
+      final followUps = ChatCardMapper.followUpsFrom({
+        'cards': <Object>[],
+        'needsConfirmation': true,
+        'suggestions': ['Yes, cancel it'],
+      });
+
+      expect(followUps, ['Yes, cancel it']);
+    });
+
+    test('a card type this client cannot draw still counts as a result', () {
+      final followUps = ChatCardMapper.followUpsFrom({
+        'cards': [
+          {'type': 'spend_summary', 'total': 12000},
+        ],
+        'suggestions': ['Break it down by cabin'],
+      });
+
+      expect(followUps, ['Break it down by cabin']);
+    });
+
+    test('a missing or malformed suggestions field is tolerated', () {
+      expect(
+        ChatCardMapper.followUpsFrom({
+          'cards': [
+            {'type': 'basket'},
+          ],
+        }),
+        isEmpty,
+      );
+      expect(
+        ChatCardMapper.followUpsFrom({
+          'cards': [
+            {'type': 'basket'},
+          ],
+          'suggestions': 'nope',
+        }),
+        isEmpty,
+      );
     });
   });
 }

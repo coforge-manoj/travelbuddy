@@ -49,6 +49,27 @@ class ChatCardMapper {
     return out;
   }
 
+  /// The follow-up chips to offer for a turn, or empty when there are none
+  /// worth showing.
+  ///
+  /// The backend attaches its stock suggestions to every turn, including
+  /// ones that produced nothing: "search for flight to london" answers "I
+  /// need an origin, a destination and a date" and still offers "Book the
+  /// recommended one", with no flights on screen to book. A turn only earns
+  /// its chips if it came back with a card or is waiting on a confirmation.
+  ///
+  /// Deliberately keyed off the backend's own `cards`, not the cards this
+  /// client managed to map, so a card type we cannot draw yet still counts
+  /// as a result and keeps its follow-ups.
+  static List<String> followUpsFrom(Map<String, dynamic> data) {
+    final cards = data['cards'];
+    final hasResult = (cards is List && cards.isNotEmpty) ||
+        data['needsConfirmation'] == true;
+    if (!hasResult) return const [];
+
+    return CardJson.asStringList(data['suggestions']);
+  }
+
   /// Card types the client knows how to draw. Anything outside this set
   /// falls back to the reply text — see [ChatCardMapper]'s doc comment.
   static const supportedCardTypes = <String>{

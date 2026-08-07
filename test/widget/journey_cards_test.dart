@@ -11,10 +11,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat_confirmation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/upgrade_quote.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/wallet_split.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/confirm_action_bar.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_offers_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_selection_sheet.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/basket_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/boarding_pass_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmed_card.dart';
@@ -337,45 +335,39 @@ void main() {
 /// The Select flow's sheet: cabin and party size in one place. Booking for
 /// more than one passenger is otherwise impossible from the UI — every card
 /// reads `pax`, but nothing sent it until this sheet existed.
+///
+/// Pumped directly rather than through [FlightOffersCard]: tapping "Select"
+/// there now reads `chatViewModelProvider` to stop any spoken reply, which
+/// would drag Hive and SharedPreferences into a test about fare arithmetic.
 void _selectionSheetTests() {
+  Future<void> pumpSheet(WidgetTester tester, FlightOffer offer) {
+    return tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: FlightSelectionSheet(offer: offer))),
+    );
+  }
+
+  final priced = FlightOffer(
+    id: 'AA50',
+    airline: 'AA',
+    flightNumber: 'AA50',
+    origin: 'DFW',
+    destination: 'LHR',
+    departureTime: DateTime(2027, 6, 10, 17, 55),
+    arrivalTime: DateTime(2027, 6, 11, 9, 5),
+    price: 769,
+    durationLabel: '9h05',
+    cabinPrices: const {'Main Cabin': 769, 'Main Cabin Extra': 1038},
+  );
+
   testWidgets('selection sheet prices the whole party as it grows',
       (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(
-            body: FlightOffersCard(
-              offers: [
-                FlightOffer(
-                  id: 'AA50',
-                  airline: 'AA',
-                  flightNumber: 'AA50',
-                  origin: 'DFW',
-                  destination: 'LHR',
-                  departureTime: DateTime(2027, 6, 10, 17, 55),
-                  arrivalTime: DateTime(2027, 6, 11, 9, 5),
-                  price: 769,
-                  durationLabel: '9h05',
-                  cabinPrices: const {
-                    'Main Cabin': 769,
-                    'Main Cabin Extra': 1038,
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Select'));
-    await tester.pumpAndSettle();
+    await pumpSheet(tester, priced);
 
     expect(find.text('AA50 · DFW → LHR'), findsOneWidget);
     expect(find.text('Passenger'), findsOneWidget);
-    // Both cabins listed, priced for one. ($769 also appears on the offer
-    // row behind the sheet, so assert on the fare unique to the sheet.)
+    // Cheapest cabin first, priced for one.
     expect(find.text('Main Cabin'), findsOneWidget);
+    expect(find.text('\$769'), findsOneWidget);
     expect(find.text('\$1,038'), findsOneWidget);
 
     await tester.tap(find.widgetWithIcon(IconButton, Icons.add_circle_outline));
@@ -388,32 +380,53 @@ void _selectionSheetTests() {
     expect(find.text('\$769 each'), findsOneWidget);
   });
 
-  testWidgets('the party cannot drop below one passenger', (tester) async {
+  testWidgets('choosing a cabin returns it with the party size',
+      (tester) async {
+    FlightSelectionChoice? choice;
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(
-            body: FlightOffersCard(
-              offers: [
-                FlightOffer(
-                  id: 'AA50',
-                  airline: 'AA',
-                  flightNumber: 'AA50',
-                  origin: 'DFW',
-                  destination: 'LHR',
-                  departureTime: DateTime(2027, 6, 10, 17, 55),
-                  arrivalTime: DateTime(2027, 6, 11, 9, 5),
-                  price: 769,
-                ),
-              ],
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                choice = await showModalBottomSheet<FlightSelectionChoice>(
+                  context: context,
+                  builder: (_) => FlightSelectionSheet(offer: priced),
+                );
+              },
+              child: const Text('open'),
             ),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('Select'));
+    await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.add_circle_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Main Cabin Extra'));
+    await tester.pumpAndSettle();
+
+    expect(choice, isNotNull);
+    expect(choice!.cabin, 'Main Cabin Extra');
+    expect(choice!.pax, 2);
+  });
+
+  testWidgets('the party cannot drop below one passenger', (tester) async {
+    await pumpSheet(
+      tester,
+      FlightOffer(
+        id: 'AA50',
+        airline: 'AA',
+        flightNumber: 'AA50',
+        origin: 'DFW',
+        destination: 'LHR',
+        departureTime: DateTime(2027, 6, 10, 17, 55),
+        arrivalTime: DateTime(2027, 6, 11, 9, 5),
+        price: 769,
+      ),
+    );
 
     // byTooltip resolves to the Tooltip that IconButton builds, so reach
     // the button itself through its icon.

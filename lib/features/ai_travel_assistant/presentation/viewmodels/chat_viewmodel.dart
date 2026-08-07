@@ -691,13 +691,13 @@ class ChatViewModel extends StateNotifier<ChatState> {
       }
 
       final backendData = Map<String, dynamic>.from(data);
-      final suggestionsData = backendData['suggestions'];
-      final suggestions = suggestionsData is List
-          ? suggestionsData.map((e) => e.toString()).toList(growable: false)
-          : const <String>[];
       final reply = backendData['reply']?.toString() ?? '';
       final needsConfirmation =
           backendData['needsConfirmation'] == true;
+
+      // Empty on a turn that produced nothing to act on — see
+      // [ChatCardMapper.followUpsFrom].
+      final suggestions = ChatCardMapper.followUpsFrom(backendData);
 
       final humanized = await ResponseHumanizerService.instance.humanize(
         userMessage: userMessage,

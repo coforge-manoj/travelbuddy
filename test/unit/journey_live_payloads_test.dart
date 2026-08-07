@@ -8,6 +8,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/cancellation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat_confirmation.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/travel_history.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/upgrade_quote.dart';
 
 /// Every payload here was captured verbatim from `POST /api/v1/chat` while
@@ -21,6 +22,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 /// contract until a newer capture replaces them.
 void main() {
   _followUpTests();
+  _travelHistoryTests();
   _searchDetailTests();
 
   group('live journey payloads', () {
@@ -509,6 +511,117 @@ void _searchDetailTests() {
         }),
         isFalse,
       );
+    });
+  });
+}
+
+/// The `travel_history` card behind "My trip details" — captured verbatim
+/// from POST /chat on 2026-08-07.
+void _travelHistoryTests() {
+  group('travel_history', () {
+    Map<String, dynamic> card() => {
+          'type': 'travel_history',
+          'count': 105,
+          'scope': 'all time',
+          'totalSpendUSD': 193325,
+          'flights': [
+            {
+              'date': '2026-07-21',
+              'flightNo': 'AA993',
+              'route': 'DFW→LHR',
+              'cabin': 'Flagship Business',
+              'fareUSD': 2834,
+              'milesEarned': 31174,
+              'seat': '3D',
+            },
+            {
+              'date': '2026-06-27',
+              'flightNo': 'AA2154',
+              'route': 'LAX→DFW',
+              'cabin': 'Main Cabin Extra',
+              'fareUSD': 264,
+              'milesEarned': 2904,
+              'seat': '29D',
+            },
+          ],
+        };
+
+    test('maps the roll-up and the recent flights', () {
+      final cards = ChatCardMapper.fromResponse([card()]);
+
+      expect(cards.single.type, ChatMessageType.travelHistoryCard);
+      final history = cards.single.payload as TravelHistory;
+
+      expect(history.count, 105);
+      expect(history.scope, 'all time');
+      expect(history.totalSpend, 193325);
+      // The headline count covers the whole period; only recent rows are sent.
+      expect(history.flights, hasLength(2));
+
+      final first = history.flights.first;
+      expect(first.flightNumber, 'AA993');
+      expect(first.cabin, 'Flagship Business');
+      expect(first.fare, 2834);
+      expect(first.milesEarned, 31174);
+      expect(first.seat, '3D');
+      // `route` arrives as one string, not origin/dest fields.
+      expect(first.airports, ['DFW', 'LHR']);
+    });
+
+    test('a route it cannot split is kept verbatim rather than dropped', () {
+      final cards = ChatCardMapper.fromResponse([
+        {
+          'type': 'travel_history',
+          'count': 1,
+          'flights': [
+            {'flightNo': 'AA1', 'route': 'DFW via ORD to LHR'},
+          ],
+        },
+      ]);
+
+      final flight = (cards.single.payload as TravelHistory).flights.single;
+      expect(flight.airports, isEmpty);
+      expect(flight.route, 'DFW via ORD to LHR');
+    });
+
+    test('separate origin/dest fields are accepted too', () {
+      final cards = ChatCardMapper.fromResponse([
+        {
+          'type': 'travel_history',
+          'count': 1,
+          'flights': [
+            {'flightNo': 'AA1', 'origin': 'DFW', 'dest': 'LHR'},
+          ],
+        },
+      ]);
+
+      expect(
+        (cards.single.payload as TravelHistory).flights.single.airports,
+        ['DFW', 'LHR'],
+      );
+    });
+
+    test('a history with nothing to say is skipped', () {
+      expect(
+        ChatCardMapper.fromResponse([
+          {'type': 'travel_history'},
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('the count falls back to the rows when the backend omits it', () {
+      final cards = ChatCardMapper.fromResponse([
+        {
+          'type': 'travel_history',
+          'flights': [
+            {'flightNo': 'AA1'},
+            {'flightNo': 'AA2'},
+          ],
+        },
+      ]);
+
+      expect((cards.single.payload as TravelHistory).count, 2);
     });
   });
 }

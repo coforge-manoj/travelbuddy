@@ -28,6 +28,7 @@ enum ChatMessageType {
   boardingPassCard,
   upgradeQuoteCard,
   cancellationCard,
+  travelHistoryCard,
 
   error,
 }

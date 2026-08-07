@@ -6,6 +6,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/ca
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/flight_list_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/flight_selected_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/seat_card_mapper.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/travel_history_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/upgrade_quote_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 
@@ -110,6 +111,7 @@ class ChatCardMapper {
     BoardingPassCardMapper.boardingPassCardType,
     UpgradeQuoteCardMapper.upgradeQuoteCardType,
     CancellationCardMapper.cancellationCardType,
+    TravelHistoryCardMapper.travelHistoryCardType,
   };
 
   static ChatCard? _fromCard(
@@ -178,6 +180,12 @@ class ChatCardMapper {
         return _card(
           ChatMessageType.upgradeQuoteCard,
           UpgradeQuoteCardMapper.fromCard(card),
+        );
+
+      case TravelHistoryCardMapper.travelHistoryCardType:
+        return _card(
+          ChatMessageType.travelHistoryCard,
+          TravelHistoryCardMapper.fromCard(card),
         );
 
       case CancellationCardMapper.cancellationCardType:

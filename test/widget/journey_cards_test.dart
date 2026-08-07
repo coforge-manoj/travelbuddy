@@ -9,6 +9,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/extras_catalogue.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat_confirmation.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/travel_history.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/upgrade_quote.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/wallet_split.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/confirm_action_bar.dart';
@@ -18,6 +19,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/wi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmed_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/cancellation_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/extras_list_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/travel_history_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/upgrade_quote_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/cabin_seat_map_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/seat_confirmed_card.dart';
@@ -307,6 +309,82 @@ void main() {
   });
 
   _selectionSheetTests();
+
+  testWidgets('travel history separates the roll-up from the recent trips',
+      (tester) async {
+    await pump(
+      tester,
+      const TravelHistoryCard(
+        history: TravelHistory(
+          count: 105,
+          scope: 'all time',
+          totalSpend: 193325,
+          flights: [
+            TravelHistoryFlight(
+              flightNumber: 'AA993',
+              date: '2026-07-21',
+              route: 'DFW\u2192LHR',
+              cabin: 'Flagship Business',
+              fare: 2834,
+              milesEarned: 31174,
+              seat: '3D',
+            ),
+            TravelHistoryFlight(
+              flightNumber: 'AA2154',
+              date: '2026-06-27',
+              route: 'LAX\u2192DFW',
+              cabin: 'Main Cabin Extra',
+              fare: 264,
+              milesEarned: 2904,
+              seat: '29D',
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.text('Your travel history'), findsOneWidget);
+    // The count is the whole record, not the two rows shown.
+    expect(find.text('105 flights · all time'), findsOneWidget);
+    expect(find.text('Last flown 21 Jul 2026'), findsOneWidget);
+    expect(find.text('Recent trips'), findsOneWidget);
+    expect(find.text('AA993 · DFW → LHR'), findsOneWidget);
+    expect(find.text('21 Jul 2026'), findsOneWidget);
+    expect(find.text('Flagship Business · Seat 3D'), findsOneWidget);
+
+    // Miles earned takes the place of the fare, which is kept on the
+    // entity but deliberately never rendered.
+    expect(find.text('+31,174'), findsOneWidget);
+    expect(find.text('miles'), findsNWidgets(2));
+    expect(find.text('\$2,834'), findsNothing);
+    expect(find.text('\$193,325'), findsNothing);
+
+    // Only two rows, so nothing to expand.
+    expect(find.textContaining('more'), findsNothing);
+  });
+
+  testWidgets('travel history collapses a long list', (tester) async {
+    await pump(
+      tester,
+      TravelHistoryCard(
+        history: TravelHistory(
+          count: 105,
+          flights: [
+            for (var i = 0; i < 12; i++)
+              TravelHistoryFlight(flightNumber: 'AA$i', route: 'DFW\u2192LHR'),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.text('AA0 · DFW → LHR'), findsOneWidget);
+    expect(find.text('AA4 · DFW → LHR'), findsNothing);
+
+    await tester.tap(find.text('Show 8 more'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AA11 · DFW → LHR'), findsOneWidget);
+  });
 
   testWidgets('confirm bar approves or drops the pending action',
       (tester) async {

@@ -18,6 +18,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_selection.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat_confirmation.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/travel_history.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/upgrade_quote.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/action_summary_card.dart';
@@ -33,6 +34,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/wi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_offers_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_selected_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_status_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/travel_history_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/upgrade_quote_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/cabin_seat_map_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/seat_confirmed_card.dart';
@@ -95,6 +97,8 @@ class RichCardWidget extends ConsumerWidget {
         UpgradeQuoteCard(quote: message.payload! as UpgradeQuote),
       ChatMessageType.cancellationCard =>
         CancellationCard(cancellation: message.payload! as Cancellation),
+      ChatMessageType.travelHistoryCard =>
+        TravelHistoryCard(history: message.payload! as TravelHistory),
 
       ChatMessageType.text || ChatMessageType.error =>
         _AgentEscalationCard(escalation: null, text: message.text),

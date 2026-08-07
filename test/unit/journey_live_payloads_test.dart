@@ -21,6 +21,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 /// contract until a newer capture replaces them.
 void main() {
   _followUpTests();
+  _searchDetailTests();
 
   group('live journey payloads', () {
     test('5. booking_confirmed — camelCase flight, payment block, miles earned',
@@ -421,6 +422,92 @@ void _followUpTests() {
           'suggestions': 'nope',
         }),
         isEmpty,
+      );
+    });
+  });
+}
+
+/// Which turns hand the next message to the conversation router instead of
+/// posting it to `/chat` verbatim. Getting this wrong either breaks the
+/// partial-search flow or corrupts the journey, so it is pinned against
+/// real payloads.
+void _searchDetailTests() {
+  group('needsSearchDetails', () {
+    test('a half-finished search asks for the next message', () {
+      // Verbatim from POST /chat "search for flight to london" on
+      // 2026-08-07 — no origin, no date, nothing to render.
+      expect(
+        ChatCardMapper.needsSearchDetails({
+          'reply': 'I need an origin, a destination and a date.',
+          'tool': 'search_flights',
+          'cards': <Object>[],
+          'suggestions': ['Book the recommended one'],
+          'needsConfirmation': false,
+        }),
+        isTrue,
+      );
+    });
+
+    test('the older `search_flight` spelling counts too', () {
+      expect(
+        ChatCardMapper.needsSearchDetails({
+          'tool': 'search_flight',
+          'cards': <Object>[],
+        }),
+        isTrue,
+      );
+    });
+
+    test('a search that found flights does not', () {
+      expect(
+        ChatCardMapper.needsSearchDetails({
+          'tool': 'search_flights',
+          'cards': [
+            {'type': 'flight_list', 'flights': <Object>[]},
+          ],
+        }),
+        isFalse,
+      );
+    });
+
+    test('a card-less journey turn does not — this is what protects the '
+        'journey', () {
+      // "cancel my booking" answered with confirm:true comes back empty
+      // under the cancel tool. Routing the next message through the router
+      // would reword it and lose the thread.
+      expect(
+        ChatCardMapper.needsSearchDetails({
+          'reply': 'Left it as it was.',
+          'tool': 'cancel_booking',
+          'cards': <Object>[],
+        }),
+        isFalse,
+      );
+    });
+
+    test('a turn awaiting confirmation does not', () {
+      expect(
+        ChatCardMapper.needsSearchDetails({
+          'reply': "That's RLTYVL — AA50 DFW to LHR. Cancel it?",
+          'tool': 'cancel_booking',
+          'cards': <Object>[],
+          'needsConfirmation': true,
+        }),
+        isFalse,
+      );
+    });
+
+    test('a missing or unknown tool does not', () {
+      expect(
+        ChatCardMapper.needsSearchDetails({'cards': <Object>[]}),
+        isFalse,
+      );
+      expect(
+        ChatCardMapper.needsSearchDetails({
+          'tool': 'list_extras',
+          'cards': <Object>[],
+        }),
+        isFalse,
       );
     });
   });

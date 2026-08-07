@@ -30,6 +30,7 @@ class ChatState extends Equatable {
     this.suggestions = const [],
     this.pendingConfirmationMessage,
     this.pendingConfirmationPrompt,
+    this.awaitingSearchDetails = false,
   });
 
   final List<ChatMessage> messages;
@@ -62,6 +63,12 @@ class ChatState extends Equatable {
   /// The backend's own wording for what is being approved, e.g. "That is
   /// $255 for 1 in Main Cabin Extra. Shall I go ahead?".
   final String? pendingConfirmationPrompt;
+
+  /// The backend is part-way through collecting a search — it has asked for
+  /// the origin, destination or date it is still missing. While this is set,
+  /// the next message is merged into the search being assembled rather than
+  /// posted to `/chat` as-is. See `ChatCardMapper.needsSearchDetails`.
+  final bool awaitingSearchDetails;
 
   bool get needsConfirmation => pendingConfirmationMessage != null;
 
@@ -96,6 +103,7 @@ class ChatState extends Equatable {
     String? pendingConfirmationMessage,
     String? pendingConfirmationPrompt,
     bool clearPendingConfirmation = false,
+    bool? awaitingSearchDetails,
   }) {
     return ChatState(
       messages: messages ?? this.messages,
@@ -132,6 +140,8 @@ class ChatState extends Equatable {
       pendingConfirmationPrompt: clearPendingConfirmation
           ? null
           : (pendingConfirmationPrompt ?? this.pendingConfirmationPrompt),
+      awaitingSearchDetails:
+          awaitingSearchDetails ?? this.awaitingSearchDetails,
     );
   }
 
@@ -153,5 +163,6 @@ class ChatState extends Equatable {
     suggestions,
     pendingConfirmationMessage,
     pendingConfirmationPrompt,
+    awaitingSearchDetails,
   ];
 }

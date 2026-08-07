@@ -62,12 +62,38 @@ class ChatCardMapper {
   /// client managed to map, so a card type we cannot draw yet still counts
   /// as a result and keeps its follow-ups.
   static List<String> followUpsFrom(Map<String, dynamic> data) {
-    final cards = data['cards'];
-    final hasResult = (cards is List && cards.isNotEmpty) ||
-        data['needsConfirmation'] == true;
-    if (!hasResult) return const [];
-
+    if (!_producedResult(data)) return const [];
     return CardJson.asStringList(data['suggestions']);
+  }
+
+  /// True when the backend is still collecting the origin, destination and
+  /// date for a search — it answers "I need an origin, a destination and a
+  /// date." under `tool: search_flights` with nothing to render.
+  ///
+  /// This is what tells a half-finished search apart from a journey turn.
+  /// The passenger's next message has to be merged into the search being
+  /// assembled (see `ConversationRouterService`) rather than posted to
+  /// `/chat` verbatim, which is right for every other turn.
+  ///
+  /// Safe by construction: a journey turn always either carries a card or
+  /// is waiting on a confirmation, and a no-op reply such as "Left it as it
+  /// was." comes back under a different tool.
+  static bool needsSearchDetails(Map<String, dynamic> data) {
+    if (_producedResult(data)) return false;
+    final tool = CardJson.asString(data['tool'])?.toLowerCase();
+    return tool != null && _searchFlightsTools.contains(tool);
+  }
+
+  /// Both spellings the backend has used for the search tool.
+  static const _searchFlightsTools = <String>{'search_flights', 'search_flight'};
+
+  /// Whether a turn came back with something to act on. Deliberately keyed
+  /// off the backend's own `cards`, not the cards this client managed to
+  /// map, so a card type we cannot draw yet still counts as a result.
+  static bool _producedResult(Map<String, dynamic> data) {
+    final cards = data['cards'];
+    return (cards is List && cards.isNotEmpty) ||
+        data['needsConfirmation'] == true;
   }
 
   /// Card types the client knows how to draw. Anything outside this set

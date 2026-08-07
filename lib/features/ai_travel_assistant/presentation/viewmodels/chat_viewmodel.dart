@@ -150,6 +150,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       isVoiceOutputEnabled: _getVoiceOutputEnabled(),
       suggestions: const [],
       clearPendingConfirmation: true,
+      awaitingSearchDetails: false,
     );
     unawaited(_saveChatMessageUseCase(welcome));
   }
@@ -228,6 +229,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       clearError: true,
       suggestions: const [],
       clearPendingConfirmation: true,
+      awaitingSearchDetails: false,
     );
 
     await _handleTravelBuddyChat(userMessage: text, apiMessage: text);
@@ -278,6 +280,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: trimmed,
       ),
     );
+    // Read before the reset below: this message is the answer to whatever
+    // the backend last asked for.
+    final continuesSearch = state.awaitingSearchDetails;
+
     state = state.copyWith(
       status: ChatStatus.sendingMessage,
       clearError: true,
@@ -286,15 +292,27 @@ class ChatViewModel extends StateNotifier<ChatState> {
       // asked for and did not answer — including a plain "yes", which the
       // backend accepts as the approval in its own right.
       clearPendingConfirmation: true,
+      // Cleared up front so it cannot go stale on a turn that never reaches
+      // the backend (escalation, a plain AI reply); the next `/chat`
+      // response sets it again from the wire.
+      awaitingSearchDetails: false,
     );
 
     // If a conversation is already active, first check whether
 // the user is continuing it or switching topics.
     if (state.activeIntent != null) {
-      // TravelBuddy /chat sessions (search → select → extras) must keep
-      // posting follow-ups to the same endpoint — including suggestion taps
-      // like "take the cheapest one".
-      if (state.activeIntent != IntentType.tripDiscovery) {
+      // Once a journey is under way, TravelBuddy `/chat` sessions (search →
+      // select → extras → book) must keep posting follow-ups to the same
+      // endpoint verbatim — including suggestion taps like "take the
+      // cheapest one" and the plain "yes" that approves a payment. Routing
+      // those through the conversation router would re-classify and reword
+      // them, and the backend would lose the thread.
+      //
+      // The exception is a search the backend is still assembling: it has
+      // asked for an origin, destination or date, and this message carries
+      // one of them. That has to be merged into the search rather than sent
+      // on its own, so it goes down the router path below.
+      if (state.activeIntent != IntentType.tripDiscovery && !continuesSearch) {
         await _handleTravelBuddyChat(
           userMessage: trimmed,
           apiMessage: trimmed,
@@ -568,11 +586,18 @@ class ChatViewModel extends StateNotifier<ChatState> {
         await _handleTripDiscovery(message);
         break;
       default:
-        // Keep the TravelBuddy /chat session alive for follow-ups
-        // (suggestions like "take the cheapest one", "Book it", etc.).
-        await _handleTravelBuddyChat(
-          userMessage: message,
-          apiMessage: message,
+        // Only reachable while a search is still being assembled — the
+        // journey path returns before this. [message] is the router's
+        // normalized prompt, e.g. "flights from Delhi to London on
+        // 2026-07-26", so re-classifying it is what finally produces a
+        // complete `qnPrompt` and runs the search.
+        state = state.copyWith(clearActiveIntent: true);
+
+        final intentResult = await _classifyIntentUseCase(message);
+
+        await intentResult.fold(
+          (failure) async => _appendError(failure.message),
+          (intent) async => _handleIntent(intent, message),
         );
     }
   }
@@ -715,6 +740,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
         pendingConfirmationMessage: needsConfirmation ? apiMessage : null,
         pendingConfirmationPrompt: needsConfirmation ? displayText : null,
         clearPendingConfirmation: !needsConfirmation,
+        // Set while the backend is still asking for an origin, destination
+        // or date, so the next message completes the search instead of
+        // being posted on its own.
+        awaitingSearchDetails: ChatCardMapper.needsSearchDetails(backendData),
       );
 
       if (displayText.isNotEmpty) {

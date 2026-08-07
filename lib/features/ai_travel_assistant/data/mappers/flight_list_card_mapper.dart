@@ -1,3 +1,4 @@
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/card_json.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 
 /// Maps TravelBuddy chat `flight_list` cards into domain [FlightOffer]s for
@@ -5,48 +6,61 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 class FlightListCardMapper {
   const FlightListCardMapper._();
 
-  static const searchFlightsTool = 'search_flights';
-  static const searchFlightToolAlias = 'search_flight';
   static const flightListCardType = 'flight_list';
 
-  static bool isSearchFlightsTool(String? tool) {
-    final normalized = tool?.trim().toLowerCase();
-    return normalized == searchFlightsTool ||
-        normalized == searchFlightToolAlias;
+  /// Returns the offers on a single `flight_list` card.
+  static List<FlightOffer> fromCard(Map<String, dynamic> card) {
+    final flights = card['flights'];
+    if (flights is! List) return const [];
+
+    final origin = card['origin']?.toString() ?? '';
+    final dest = card['dest']?.toString() ?? '';
+    final date = card['date']?.toString() ?? '';
+
+    return flights
+        .whereType<Map>()
+        .map(
+          (flight) => fromFlightJson(
+            Map<String, dynamic>.from(flight),
+            cardOrigin: origin,
+            cardDest: dest,
+            cardDate: date,
+          ),
+        )
+        .whereType<FlightOffer>()
+        .toList(growable: false);
   }
 
   /// Returns offers from the first `flight_list` card in [cards], or an empty
   /// list when none are present / parseable.
   static List<FlightOffer> fromCards(Object? cards) {
-    if (cards is! List) return const [];
-
-    for (final raw in cards) {
-      if (raw is! Map) continue;
-      final card = Map<String, dynamic>.from(raw);
-      if (card['type']?.toString() != flightListCardType) continue;
-
-      final flights = card['flights'];
-      if (flights is! List) return const [];
-
-      final origin = card['origin']?.toString() ?? '';
-      final dest = card['dest']?.toString() ?? '';
-      final date = card['date']?.toString() ?? '';
-
-      return flights
-          .whereType<Map>()
-          .map(
-            (flight) => fromFlightJson(
-              Map<String, dynamic>.from(flight),
-              cardOrigin: origin,
-              cardDest: dest,
-              cardDate: date,
-            ),
-          )
-          .whereType<FlightOffer>()
-          .toList(growable: false);
+    for (final card in CardJson.asMapList(cards)) {
+      if (CardJson.typeOf(card) != flightListCardType) continue;
+      return fromCard(card);
     }
-
     return const [];
+  }
+
+  /// The flight a basket / booking / boarding-pass card refers to.
+  ///
+  /// Some cards nest it under `flight`; others carry the flight's fields
+  /// flat on the card itself — `GET /bookings/current` returns the flat
+  /// form (`flight_no`, `dep_time`, `arr_time`, …), so both are read here
+  /// rather than at each call site.
+  static FlightOffer? nestedFlightFrom(Map<String, dynamic> card) {
+    final flight = CardJson.asMap(CardJson.pick(card, ['flight'])) ??
+        (CardJson.pick(card, ['flight_no']) == null ? null : card);
+    if (flight == null) return null;
+
+    return fromFlightJson(
+      flight,
+      cardOrigin: CardJson.asString(CardJson.pick(card, ['origin', 'from'])) ?? '',
+      cardDest:
+          CardJson.asString(CardJson.pick(card, ['dest', 'destination', 'to'])) ??
+              '',
+      cardDate:
+          CardJson.asString(CardJson.pick(card, ['date', 'flight_date'])) ?? '',
+    );
   }
 
   /// Parses one API flight object. Returns `null` when required fields are
@@ -57,23 +71,29 @@ class FlightListCardMapper {
     String cardDest = '',
     String cardDate = '',
   }) {
-    final flightNo = json['flight_no']?.toString().trim();
-    if (flightNo == null || flightNo.isEmpty) return null;
+    // Search results say `flight_no`; a booking's nested flight says
+    // `flightNo` and dates it with `date` rather than `flight_date`.
+    final flightNo =
+        CardJson.asString(CardJson.pick(json, ['flight_no', 'flightNumber']));
+    if (flightNo == null) return null;
 
-    final origin = (json['origin']?.toString().trim().isNotEmpty ?? false)
-        ? json['origin'].toString()
-        : cardOrigin;
-    final dest = (json['dest']?.toString().trim().isNotEmpty ?? false)
-        ? json['dest'].toString()
-        : cardDest;
+    final origin =
+        CardJson.asString(CardJson.pick(json, ['origin'])) ?? cardOrigin;
+    final dest = CardJson.asString(CardJson.pick(json, ['dest'])) ?? cardDest;
     final flightDate =
-        (json['flight_date']?.toString().trim().isNotEmpty ?? false)
-            ? json['flight_date'].toString()
-            : cardDate;
+        CardJson.asString(CardJson.pick(json, ['flight_date', 'date'])) ??
+            cardDate;
 
-    final dep = json['dep']?.toString() ?? '';
-    final arr = json['arr']?.toString() ?? '';
-    final arrivesNextDay = _asBool(json['arrives_next_day']);
+    // Search results say `dep`/`arr`; a stored booking says
+    // `dep_time`/`arr_time` for the same thing.
+    final dep = CardJson.asString(CardJson.pick(json, ['dep', 'dep_time'])) ?? '';
+    final arr = CardJson.asString(CardJson.pick(json, ['arr', 'arr_time'])) ?? '';
+    // A stored booking omits `arrives_next_day` entirely, so an overnight
+    // leg (dep 16:21, arr 01:26) would otherwise land before it took off
+    // and report a negative duration. An arrival earlier than the departure
+    // can only mean the next day.
+    final arrivesNextDay =
+        _asBool(json['arrives_next_day']) || _wrapsPastMidnight(dep, arr);
 
     final departureTime = _combineDateAndTime(flightDate, dep);
     final arrivalTime = _combineDateAndTime(
@@ -83,7 +103,7 @@ class FlightListCardMapper {
     );
     if (departureTime == null || arrivalTime == null) return null;
 
-    final price = _asNum(json['price']) ?? 0;
+    final price = _asNum(CardJson.pick(json, ['price', 'fare_usd'])) ?? 0;
     final cabinPrices = _parseCabinPrices(json['cabin_prices']);
 
     return FlightOffer(
@@ -103,6 +123,22 @@ class FlightListCardMapper {
       arrivesNextDay: arrivesNextDay,
       cabinPrices: cabinPrices,
     );
+  }
+
+  /// True when [arr] is earlier in the day than [dep] — both are local
+  /// `HH:mm` at their own airport, so this is a heuristic for an overnight
+  /// leg, used only when the payload does not say outright.
+  static bool _wrapsPastMidnight(String dep, String arr) {
+    final depMinutes = _minutesOfDay(dep);
+    final arrMinutes = _minutesOfDay(arr);
+    if (depMinutes == null || arrMinutes == null) return false;
+    return arrMinutes < depMinutes;
+  }
+
+  static int? _minutesOfDay(String time) {
+    final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(time.trim());
+    if (match == null) return null;
+    return int.parse(match.group(1)!) * 60 + int.parse(match.group(2)!);
   }
 
   static String _airlineFromFlightNo(String flightNo) {

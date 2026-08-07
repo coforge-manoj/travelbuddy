@@ -6,6 +6,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_header.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_suggestion_chips.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/confirm_action_bar.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/message_composer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/rich_card_widget.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/typing_indicator.dart';
@@ -117,7 +119,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     },
                   ),
           ),
-          if (nextScenarioTurn != null)
+          // A pending confirmation outranks the suggestion chips: paying,
+          // upgrading and cancelling are the one thing the passenger has to
+          // answer before anything else moves.
+          if (state.needsConfirmation && !state.isBusy)
+            ConfirmActionBar(
+              prompt: state.pendingConfirmationPrompt ?? 'Shall I go ahead?',
+              onConfirm: viewModel.confirmPendingAction,
+              onDecline: viewModel.declinePendingAction,
+            )
+          else if (state.suggestions.isNotEmpty && !state.isBusy)
+            ChatSuggestionChips(
+              suggestions: state.suggestions,
+              onSelected: viewModel.sendMessage,
+            )
+          else if (nextScenarioTurn != null)
             SuggestedReplyChip(
               text: nextScenarioTurn.parentLine,
               onTap: () => viewModel.sendMessage(nextScenarioTurn.parentLine),

@@ -8,6 +8,7 @@ enum ChatMessageType {
   text,
   flightStatusCard,
   flightOffersCard,
+  flightSelectedCard,
   bookingConfirmationCard,
   seatMapCard,
   baggageOptionsCard,
@@ -15,6 +16,19 @@ enum ChatMessageType {
   airportInfoCard,
   agentEscalationCard,
   actionSummaryCard,
+
+  /// TravelBuddy `/chat` card types. These carry the conversational journey
+  /// — search → select → extras → book → seat → check-in → upgrade → cancel
+  /// — and are mapped straight from the `cards` array on a chat response.
+  basketCard,
+  extrasListCard,
+  bookingConfirmedCard,
+  cabinSeatMapCard,
+  seatConfirmedCard,
+  boardingPassCard,
+  upgradeQuoteCard,
+  cancellationCard,
+
   error,
 }
 

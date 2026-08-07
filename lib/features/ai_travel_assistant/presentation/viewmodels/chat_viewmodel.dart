@@ -7,7 +7,7 @@ import 'package:ai_travel_assistant/core/di/providers.dart';
 import 'package:ai_travel_assistant/core/services/local_notification_service.dart';
 import 'package:ai_travel_assistant/core/services/reminder_delay_store.dart';
 import 'package:ai_travel_assistant/core/services/voice_output_setting_store.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/flight_list_card_mapper.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/chat_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
@@ -119,7 +119,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
   final bool Function() _getVoiceOutputEnabled;
   final void Function(String? scenarioId) _setPendingNextScenarioId;
 
-  FlightServices _flightService = FlightServices();
+  /// One per view model, so every fresh chat session gets its own
+  /// `x-session-id` and therefore a clean journey on the backend — matching
+  /// the local history reset in [_startNewSession].
+  final FlightServices _flightService = FlightServices();
 
   /// Every fresh entry into the chat screen (including navigating back and
   /// re-opening it — see the `autoDispose` on [chatViewModelProvider], which
@@ -145,6 +148,8 @@ class ChatViewModel extends StateNotifier<ChatState> {
       status: ChatStatus.idle,
       messages: [welcome],
       isVoiceOutputEnabled: _getVoiceOutputEnabled(),
+      suggestions: const [],
+      clearPendingConfirmation: true,
     );
     unawaited(_saveChatMessageUseCase(welcome));
   }
@@ -197,56 +202,72 @@ class ChatViewModel extends StateNotifier<ChatState> {
   //   await _handleBookFlight();
   // }
 
-  /// Called once the passenger taps "Select" on a [FlightOffersCard] entry.
-  /// Books the flight, then kicks off the guided seat → baggage flow that
-  /// [confirmSeatChange], [confirmBaggagePurchase], [addMoreBaggage], and
-  /// [finishBooking] carry forward.
-  Future<void> selectFlightOffer(String offerId) async {
-    state = state.copyWith(status: ChatStatus.sendingMessage);
-    final result = await _bookFlightUseCase(
-        offerId: offerId, passengerName: _demoTravelerFullName);
-    await result.fold(
-      (failure) async => _appendError(failure.message),
-      (booking) async {
-        state = state.copyWith(
-          pendingBooking: booking,
-          clearPendingSeatNumber: true,
-          pendingBaggagePurchases: const [],
-        );
-        _appendMessage(
-          ChatMessage(
-            id: _uuid.v4(),
-            role: ChatRole.assistant,
-            type: ChatMessageType.text,
-            timestamp: DateTime.now(),
-            text:
-                'Flight ${booking.flight.flightNumber} is reserved — now pick your seat.',
-          ),
-        );
-        final seatMapResult =
-            await _getSeatMapUseCase(booking.flight.flightNumber);
-        seatMapResult.fold(
-          (failure) => _appendError(failure.message),
-          (seatMap) => _appendMessage(
-            ChatMessage(
-              id: _uuid.v4(),
-              role: ChatRole.assistant,
-              type: ChatMessageType.seatMapCard,
-              timestamp: DateTime.now(),
-              text: 'Pick a seat below — window seats are highlighted.',
-              payload: seatMap,
-            ),
-          ),
-        );
-      },
+  /// Every interactive control on a journey card — "Select" on a flight,
+  /// "Add" on an extra, a seat on the map — goes back through `/chat` as the
+  /// sentence the passenger could have typed instead.
+  ///
+  /// That is deliberate: the backend holds the basket and the booking
+  /// against the session, so a tap and a typed message have to arrive the
+  /// same way for the next turn to resolve. It also means the transcript
+  /// reads as a conversation either way.
+  Future<void> _sendJourneyMessage(String text) async {
+    stopSpeaking();
+    if (state.isBusy) return;
+
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.user,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: text,
+      ),
     );
+    state = state.copyWith(
+      status: ChatStatus.sendingMessage,
+      clearError: true,
+      suggestions: const [],
+      clearPendingConfirmation: true,
+    );
+
+    await _handleTravelBuddyChat(userMessage: text, apiMessage: text);
+
     state = state.copyWith(status: ChatStatus.idle);
   }
+
+  /// Called once the passenger taps "Select" on a [FlightOffersCard] entry,
+  /// optionally in a specific [cabin] from that flight's `cabin_prices` and
+  /// for a party of [pax].
+  ///
+  /// The passenger count is only stated when it is more than one — the
+  /// backend defaults to a single traveller, and "for 1 passenger" reads
+  /// oddly in a transcript that is meant to sound like a conversation.
+  Future<void> selectFlightOffer(
+    String flightNumber, {
+    String? cabin,
+    int pax = 1,
+  }) {
+    final buffer = StringBuffer('Select flight $flightNumber');
+    if (cabin != null && cabin.isNotEmpty) buffer.write(' in $cabin');
+    if (pax > 1) buffer.write(' for $pax passengers');
+    return _sendJourneyMessage(buffer.toString());
+  }
+
+  /// "Add" on an `extras_list` row.
+  Future<void> addExtra(String extraName) =>
+      _sendJourneyMessage('Add $extraName');
+
+  /// A seat tapped on a `seat_map` card. Worded the way the backend's own
+  /// examples are, so it resolves against the live map.
+  Future<void> selectSeat(String seatNumber) =>
+      _sendJourneyMessage('Change my seat to $seatNumber');
 
   /// Entry point for the composer and suggested-prompt chips.
   Future<void> sendMessage(String text) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty || state.isBusy) return;
+    if (trimmed.isEmpty) return;
+    stopSpeaking();
+    if (state.isBusy) return;
 
     _appendMessage(
       ChatMessage(
@@ -257,11 +278,31 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: trimmed,
       ),
     );
-    state = state.copyWith(status: ChatStatus.sendingMessage, clearError: true);
+    state = state.copyWith(
+      status: ChatStatus.sendingMessage,
+      clearError: true,
+      suggestions: const [],
+      // Whatever the passenger typed supersedes a confirmation they were
+      // asked for and did not answer — including a plain "yes", which the
+      // backend accepts as the approval in its own right.
+      clearPendingConfirmation: true,
+    );
 
     // If a conversation is already active, first check whether
 // the user is continuing it or switching topics.
     if (state.activeIntent != null) {
+      // TravelBuddy /chat sessions (search → select → extras) must keep
+      // posting follow-ups to the same endpoint — including suggestion taps
+      // like "take the cheapest one".
+      if (state.activeIntent != IntentType.tripDiscovery) {
+        await _handleTravelBuddyChat(
+          userMessage: trimmed,
+          apiMessage: trimmed,
+        );
+        state = state.copyWith(status: ChatStatus.idle);
+        return;
+      }
+
       final lastAssistantMessage = state.messages
           .lastWhere(
             (e) => e.role == ChatRole.assistant,
@@ -527,15 +568,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
         await _handleTripDiscovery(message);
         break;
       default:
-        state = state.copyWith(
-          clearActiveIntent: true,
-        );
-
-        final intentResult = await _classifyIntentUseCase(message);
-
-        await intentResult.fold(
-          (failure) async => _appendError(failure.message),
-          (intent) async => _handleIntent(intent, message),
+        // Keep the TravelBuddy /chat session alive for follow-ups
+        // (suggestions like "take the cheapest one", "Book it", etc.).
+        await _handleTravelBuddyChat(
+          userMessage: message,
+          apiMessage: message,
         );
     }
   }
@@ -622,55 +659,149 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 
   Future<void> _handleOthersRequest(IntentResult intent) async {
-    print(intent.originalMessage);
-    var response = await _flightService.getFlightResponse(intent.qnPromt);
-
-    final backendData = Map<String, dynamic>.from(
-      response['data'] as Map,
-    );
-
-    final suggestionsData = backendData['suggestions'];
-    final reply = backendData['reply']?.toString() ?? '';
-
-    final humanized = await ResponseHumanizerService.instance.humanize(
+    final apiMessage = intent.qnPromt.trim().isNotEmpty
+        ? intent.qnPromt
+        : intent.originalMessage;
+    await _handleTravelBuddyChat(
       userMessage: intent.originalMessage,
-      backendResponse: backendData,
-      suggestions: suggestionsData is List
-          ? suggestionsData.map((e) => e.toString()).toList()
-          : <String>[],
+      apiMessage: apiMessage,
     );
+  }
 
-    _appendMessage(
-      ChatMessage(
-        id: _uuid.v4(),
-        role: ChatRole.assistant,
-        type: ChatMessageType.text,
-        timestamp: DateTime.now(),
-        text: reply.isNotEmpty ? reply : humanized.message,
-      ),
-      speakAs: humanized.message,
-    );
+  /// Posts to TravelBuddy `/api/v1/chat`, shows `reply` in the bubble,
+  /// speaks the humanized copy, and renders every card the turn came back
+  /// with.
+  ///
+  /// [confirm] re-sends [apiMessage] as an approval, which is how the
+  /// Confirm button completes a booking, upgrade or cancellation.
+  Future<void> _handleTravelBuddyChat({
+    required String userMessage,
+    required String apiMessage,
+    bool confirm = false,
+  }) async {
+    try {
+      final response = await _flightService.getFlightResponse(
+        apiMessage,
+        confirm: confirm,
+      );
+      final data = response is Map ? response['data'] : null;
+      if (data is! Map) {
+        _appendError('Unexpected response from flight assistant.');
+        return;
+      }
 
-    // TravelBuddy search_flights responses include a flight_list card — surface
-    // it as the existing flight-offers rich card when intent matches.
-    if (intent.type == IntentType.searchFlights &&
-        FlightListCardMapper.isSearchFlightsTool(
-          backendData['tool']?.toString(),
-        )) {
-      final offers = FlightListCardMapper.fromCards(backendData['cards']);
-      if (offers.isNotEmpty) {
+      final backendData = Map<String, dynamic>.from(data);
+      final suggestionsData = backendData['suggestions'];
+      final suggestions = suggestionsData is List
+          ? suggestionsData.map((e) => e.toString()).toList(growable: false)
+          : const <String>[];
+      final reply = backendData['reply']?.toString() ?? '';
+      final needsConfirmation =
+          backendData['needsConfirmation'] == true;
+
+      final humanized = await ResponseHumanizerService.instance.humanize(
+        userMessage: userMessage,
+        backendResponse: backendData,
+        suggestions: suggestions,
+      );
+
+      final displayText = reply.isNotEmpty ? reply : humanized.message;
+
+      // Anything the backend still wants approved is parked here rather than
+      // acted on: the passenger approves it from the confirmation bar, which
+      // re-sends this same message with `confirm: true`.
+      state = state.copyWith(
+        suggestions: suggestions,
+        pendingConfirmationMessage: needsConfirmation ? apiMessage : null,
+        pendingConfirmationPrompt: needsConfirmation ? displayText : null,
+        clearPendingConfirmation: !needsConfirmation,
+      );
+
+      if (displayText.isNotEmpty) {
         _appendMessage(
           ChatMessage(
             id: _uuid.v4(),
             role: ChatRole.assistant,
-            type: ChatMessageType.flightOffersCard,
+            type: ChatMessageType.text,
             timestamp: DateTime.now(),
-            text: reply.isNotEmpty ? reply : humanized.message,
-            payload: offers,
+            text: displayText,
+          ),
+          speakAs: humanized.message,
+        );
+      }
+
+      // Dispatch is on each card's own `type` — a turn can carry more than
+      // one card, and the same type shows up under different tools (a
+      // `basket` arrives both from adding extras and as the "book it"
+      // preview).
+      final cards = ChatCardMapper.fromResponse(
+        backendData['cards'],
+        needsConfirmation: needsConfirmation,
+      );
+      for (final card in cards) {
+        _appendMessage(
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatRole.assistant,
+            type: card.type,
+            timestamp: DateTime.now(),
+            text: displayText,
+            payload: card.payload,
           ),
         );
       }
+    } catch (e) {
+      _appendError('Sorry, I could not reach the flight assistant. ($e)');
     }
+  }
+
+  /// The affirmation the Confirm button sends.
+  ///
+  /// The integration guide offers two ways to approve a pending action —
+  /// resend the original message with `confirm: true`, or send the
+  /// passenger's plain "yes" — but only the second works for every flow.
+  /// Resending "cancel my booking" with the flag set gets re-parsed as a
+  /// fresh request and answered "Left it as it was", so the booking stays
+  /// put while the UI reports it confirmed. "yes" is honoured by checkout,
+  /// upgrade and cancellation alike.
+  static const _affirmation = 'yes';
+
+  /// Approves the action the last turn asked about.
+  Future<void> confirmPendingAction() async {
+    stopSpeaking();
+    if (!state.needsConfirmation || state.isBusy) return;
+
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.user,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: 'Yes, go ahead',
+      ),
+    );
+    state = state.copyWith(
+      status: ChatStatus.sendingMessage,
+      clearError: true,
+      clearPendingConfirmation: true,
+      suggestions: const [],
+    );
+
+    await _handleTravelBuddyChat(
+      userMessage: 'Yes, go ahead',
+      apiMessage: _affirmation,
+      confirm: true,
+    );
+
+    state = state.copyWith(status: ChatStatus.idle);
+  }
+
+  /// Drops the pending action without telling the backend anything — it only
+  /// ever acts on an explicit confirmation, so leaving it unanswered is
+  /// enough, and the passenger can keep typing.
+  void declinePendingAction() {
+    stopSpeaking();
+    state = state.copyWith(clearPendingConfirmation: true);
   }
 
   void _appendEscalationOffer() {
@@ -717,6 +848,9 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// Starts voice input. On a final transcript, feeds it straight into
   /// [sendMessage] — the same path suggested prompts and the composer use.
   Future<void> startVoiceInput() async {
+    // Also keeps the recognizer from picking the assistant's own voice up as
+    // the passenger's next utterance.
+    stopSpeaking();
     if (state.isBusy || state.status == ChatStatus.listening) return;
     final started = await _voiceService.startListening(
       onResult: (transcript, isFinal) {
@@ -745,7 +879,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
   void toggleVoiceOutput() {
     state = state.copyWith(isVoiceOutputEnabled: !state.isVoiceOutputEnabled);
     if (!state.isVoiceOutputEnabled) {
-      unawaited(_voiceService.stopSpeaking());
+      stopSpeaking();
     }
   }
 
@@ -769,6 +903,21 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
   }
 
+  /// Cuts the assistant off mid-sentence. Called from every deliberate
+  /// passenger interaction — a typed message, a suggestion chip, a tap on a
+  /// journey card, an answer to a confirmation, the mic — because carrying on
+  /// reading out a reply the passenger has already moved past reads as the
+  /// assistant not listening. Deliberately fires even when the interaction is
+  /// then dropped (e.g. a tap that lands while [ChatState.isBusy]): the
+  /// passenger acted either way.
+  ///
+  /// Fire-and-forget: nothing downstream waits on the audio actually having
+  /// stopped, and the reply for the new turn is spoken by [_appendMessage]
+  /// well after this resolves.
+  void stopSpeaking() {
+    unawaited(_stopSpeakingSafely());
+  }
+
   /// Voice output is a nice-to-have; a plugin/platform failure here (e.g. no
   /// TTS engine installed) should never break the chat flow itself.
   Future<void> _speakSafely(String text) async {
@@ -776,6 +925,14 @@ class ChatViewModel extends StateNotifier<ChatState> {
       await _voiceService.speak(text);
     } catch (_) {
       // Intentionally swallowed — see doc comment above.
+    }
+  }
+
+  Future<void> _stopSpeakingSafely() async {
+    try {
+      await _voiceService.stopSpeaking();
+    } catch (_) {
+      // Intentionally swallowed — see [_speakSafely].
     }
   }
 

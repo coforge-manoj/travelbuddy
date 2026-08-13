@@ -26,8 +26,18 @@ class ConversationRouterService {
     required String assistantMessage,
     required String userMessage,
     required Map<String, dynamic> context,
+    String? stageHint,
   }) async {
     try {
+      final routerInput = <String, dynamic>{
+        "currentIntent": activeIntent.name,
+        "currentContext": context,
+        if (stageHint != null && stageHint.isNotEmpty)
+          "currentJourneyStage": stageHint,
+        "previousAssistantMessage": assistantMessage,
+        "latestUserMessage": userMessage,
+      };
+
       final messages = <Map<String, String>>[
         {
           "role": "system",
@@ -35,24 +45,12 @@ class ConversationRouterService {
         },
         {
           "role": "user",
-          "content": jsonEncode({
-            "currentIntent": activeIntent.name,
-            "currentContext": context,
-            "previousAssistantMessage": assistantMessage,
-            "latestUserMessage": userMessage,
-          }),
+          "content": jsonEncode(routerInput),
         },
       ];
 
       print("===== ROUTER INPUT =====");
-      print(
-        const JsonEncoder.withIndent('  ').convert({
-          "currentIntent": activeIntent.name,
-          "currentContext": context,
-          "previousAssistantMessage": assistantMessage,
-          "latestUserMessage": userMessage,
-        }),
-      );
+      print(const JsonEncoder.withIndent('  ').convert(routerInput));
 
       final response = await http.post(
         Uri.parse(_apiUrl),

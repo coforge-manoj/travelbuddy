@@ -27,6 +27,13 @@ enum VoicePhase {
   /// The turn has been sent; the backend and the synthesizer are working.
   thinking,
 
+  /// The assistant is saying what it is about to go and do, while the answer
+  /// is still being fetched.
+  ///
+  /// Audible like [speaking], but the turn is not over: the microphone must
+  /// stay closed afterwards, and the timeout on the answer keeps running.
+  acknowledging,
+
   /// Audio is playing. The microphone stays closed until it finishes.
   speaking,
 
@@ -43,6 +50,7 @@ class VoiceConversationState extends Equatable {
     this.phase = VoicePhase.idle,
     this.partialTranscript = '',
     this.lastSpokenLine = '',
+    this.acknowledgement = '',
     this.message,
     this.consecutiveSilentTurns = 0,
   });
@@ -57,6 +65,14 @@ class VoiceConversationState extends Equatable {
   /// hearing the speaker, not the passenger talking.
   final String lastSpokenLine;
 
+  /// What the assistant said back when the turn was sent — "Sure, you want me
+  /// to check your seat. Let me look at the seats."
+  ///
+  /// Kept in state as well as spoken so the caption can show it while the
+  /// answer is being fetched. That is the whole of the wait, and a passenger
+  /// who missed the audio should be able to read what it heard.
+  final String acknowledgement;
+
   /// Something to show the passenger — why the loop stopped, or what to do
   /// about a refused microphone.
   final String? message;
@@ -65,6 +81,11 @@ class VoiceConversationState extends Equatable {
   /// couple rather than reopening the microphone forever at someone who has
   /// put the phone down.
   final int consecutiveSilentTurns;
+
+  /// Whether the assistant is audible — either half of it, the line said up
+  /// front or the answer.
+  bool get isSpeaking =>
+      phase == VoicePhase.speaking || phase == VoicePhase.acknowledging;
 
   /// Whether the microphone is open.
   bool get isListening =>
@@ -79,6 +100,7 @@ class VoiceConversationState extends Equatable {
     VoicePhase? phase,
     String? partialTranscript,
     String? lastSpokenLine,
+    String? acknowledgement,
     String? message,
     bool clearMessage = false,
     int? consecutiveSilentTurns,
@@ -87,6 +109,7 @@ class VoiceConversationState extends Equatable {
       phase: phase ?? this.phase,
       partialTranscript: partialTranscript ?? this.partialTranscript,
       lastSpokenLine: lastSpokenLine ?? this.lastSpokenLine,
+      acknowledgement: acknowledgement ?? this.acknowledgement,
       message: clearMessage ? null : (message ?? this.message),
       consecutiveSilentTurns:
           consecutiveSilentTurns ?? this.consecutiveSilentTurns,
@@ -98,6 +121,7 @@ class VoiceConversationState extends Equatable {
         phase,
         partialTranscript,
         lastSpokenLine,
+        acknowledgement,
         message,
         consecutiveSilentTurns,
       ];

@@ -4,9 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:ai_travel_assistant/core/errors/failures.dart';
 import 'package:ai_travel_assistant/core/services/local_notification_service.dart';
 import 'package:ai_travel_assistant/core/utils/result.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/book_flight_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart';
@@ -435,6 +437,97 @@ void main() {
       voice.gate!.complete();
       await pumpEventQueue();
 
+      expect(seen.last, SpeechActivity.settled);
+    });
+  });
+
+  group('the line said before the answer', () {
+    /// A turn that reaches the backend and comes back with nothing to say.
+    ///
+    /// The interesting case rather than the convenient one: with no answer to
+    /// speak, the acknowledgement is the *only* utterance of the turn, so
+    /// anything wrong with its bookkeeping shows up here instead of being
+    /// covered by the answer that follows it.
+    void stubFailingTurn() {
+      when(() => chatRepository.classifyIntent(any())).thenAnswer(
+        (_) async => const Result.failure(NetworkFailure('offline')),
+      );
+    }
+
+    test('is spoken, but never written into the transcript', () async {
+      final viewModel = buildViewModel();
+      addTearDown(viewModel.dispose);
+      await pumpEventQueue();
+      stubFailingTurn();
+
+      await viewModel.sendMessage(
+        'what is my gate',
+        acknowledgement: 'Sure, you want to know about your gate. One moment.',
+      );
+      await pumpEventQueue();
+
+      expect(voice.played.first, startsWith('Sure, you want to know'));
+      // Read back later, a bubble for this would be a promise with no answer
+      // attached to it.
+      expect(
+        viewModel.state.messages.map((m) => m.text),
+        isNot(contains(contains('you want to know about your gate'))),
+      );
+    });
+
+    test('is never handed to the summarizer', () async {
+      final viewModel = buildViewModel();
+      addTearDown(viewModel.dispose);
+      await pumpEventQueue();
+      stubFailingTurn();
+
+      await viewModel.sendMessage(
+        'what is my gate',
+        acknowledgement: 'Sure. One moment.',
+      );
+      await pumpEventQueue();
+
+      // The summarizer's round trip is longer than the wait this is filling —
+      // paying for it would make the line arrive after the answer it precedes.
+      expect(voice.summarizeFlags.first, isFalse);
+    });
+
+    test('does not settle the turn it is spoken during', () async {
+      final viewModel = buildViewModel();
+      addTearDown(viewModel.dispose);
+      await pumpEventQueue();
+      stubFailingTurn();
+
+      final seen = <SpeechActivity>[];
+      final sub = viewModel.speechActivity.listen(seen.add);
+      addTearDown(sub.cancel);
+
+      // A backend that has not answered yet — the situation this whole feature
+      // exists for, and the only one where the bug it guards against appears.
+      final backend = Completer<Result<IntentResult>>();
+      when(() => chatRepository.classifyIntent(any()))
+          .thenAnswer((_) => backend.future);
+
+      final turn = viewModel.sendMessage(
+        'what is my gate',
+        acknowledgement: 'Sure. One moment.',
+      );
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      // The acknowledgement has finished playing and the queue is empty — which
+      // on its own looks exactly like the turn having finished speaking. If it
+      // settled here the loop would reopen the microphone, invite the passenger
+      // to speak, and then talk over them when the answer arrived.
+      expect(seen, contains(SpeechActivity.acknowledging));
+      expect(seen, isNot(contains(SpeechActivity.settled)));
+
+      backend.complete(const Result.failure(NetworkFailure('offline')));
+      await turn;
+      await pumpEventQueue();
+
+      // And the turn ending is what releases it, even though this one never
+      // found anything to say.
       expect(seen.last, SpeechActivity.settled);
     });
   });

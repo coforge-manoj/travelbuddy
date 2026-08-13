@@ -1,3 +1,5 @@
+import 'package:ai_travel_assistant/core/services/active_account_store.dart';
+
 import '../../../../core/services/api_services/api_service.dart';
 
 /// Talks to the TravelBuddy `/chat` endpoint — the single endpoint the whole
@@ -10,9 +12,14 @@ class FlightServices {
   /// re-sending context. A fresh instance therefore starts a clean journey —
   /// [ChatViewModel] creates one per chat session, matching the local
   /// history reset.
-  FlightServices({String? sessionId})
+  ///
+  /// [memberNo] is the passenger the journey runs as — the app picks it from
+  /// the account switcher on Home (see `activeAccountProvider`), so it is
+  /// passed in rather than hardcoded.
+  FlightServices({String? sessionId, String? memberNo})
       : sessionId =
-            sessionId ?? 'tb-${DateTime.now().millisecondsSinceEpoch}';
+            sessionId ?? 'tb-${DateTime.now().millisecondsSinceEpoch}',
+        memberNo = memberNo ?? demoAccounts.first.memberNo;
 
   final ApiService _apiService = ApiService(
     // Tunnel URL — it changes whenever the tunnel restarts, so this is the
@@ -21,12 +28,12 @@ class FlightServices {
   );
 
   final String sessionId;
+  final String memberNo;
 
-  static const _memberNo = '5QW08HB';
   static const _apiKey = 'njv+D1R/BdIz/U0BS7p1aN+6TodQI5hnKVZw3eThx4Y=';
 
   Map<String, String> get _headers => {
-        'x-member-no': _memberNo,
+        'x-member-no': memberNo,
         'x-session-id': sessionId,
         'x-api-key': _apiKey,
       };

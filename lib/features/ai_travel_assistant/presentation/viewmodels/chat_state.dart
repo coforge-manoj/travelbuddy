@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/journey/journey_stage.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/domain/entities/proactive_scenario.dart';
 import '../../data/models/conersation_route/trip_discovery_context.dart';
 import '../../domain/entities/intent.dart';
@@ -27,6 +28,15 @@ enum SpeechActivity {
   /// Audio is playing.
   playing,
 
+  /// The line said *before* the answer — "sure, let me check that" — is
+  /// playing.
+  ///
+  /// Separate from [playing] because it means the opposite thing to a
+  /// listener: the assistant has started talking, but the turn is still in
+  /// flight. Treating it as [playing] would cancel the conversation loop's
+  /// timeout on a turn that has not been answered yet.
+  acknowledging,
+
   /// Nothing is playing and nothing is queued — the turn has finished
   /// speaking. Also emitted when a turn produced no speech at all, so a
   /// listener waiting on it is never left hanging.
@@ -49,7 +59,7 @@ class ChatState extends Equatable {
     this.suggestions = const [],
     this.pendingConfirmationMessage,
     this.pendingConfirmationPrompt,
-    this.awaitingSearchDetails = false,
+    this.awaitingDetailsFor,
   });
 
   final List<ChatMessage> messages;
@@ -65,7 +75,6 @@ class ChatState extends Equatable {
   final int scenarioTurnIndex;
 
   final IntentType? activeIntent;
-
 
   /// NEW
   final ConversationContext conversationContext;
@@ -83,11 +92,15 @@ class ChatState extends Equatable {
   /// $255 for 1 in Main Cabin Extra. Shall I go ahead?".
   final String? pendingConfirmationPrompt;
 
-  /// The backend is part-way through collecting a search — it has asked for
-  /// the origin, destination or date it is still missing. While this is set,
-  /// the next message is merged into the search being assembled rather than
-  /// posted to `/chat` as-is. See `ChatCardMapper.needsSearchDetails`.
-  final bool awaitingSearchDetails;
+  /// The backend is still collecting details for this journey stage (search
+  /// origin/date, which extra, which seat, …). While set, the next message
+  /// is merged via the conversation router rather than posted to `/chat`
+  /// as-is. See [ChatCardMapper.outcomeOf].
+  final JourneyStage? awaitingDetailsFor;
+
+  /// Back-compat for voice/controller call sites that still ask whether a
+  /// search (or any collecting stage) is mid-flight.
+  bool get awaitingSearchDetails => awaitingDetailsFor != null;
 
   bool get needsConfirmation => pendingConfirmationMessage != null;
 
@@ -122,7 +135,8 @@ class ChatState extends Equatable {
     String? pendingConfirmationMessage,
     String? pendingConfirmationPrompt,
     bool clearPendingConfirmation = false,
-    bool? awaitingSearchDetails,
+    JourneyStage? awaitingDetailsFor,
+    bool clearAwaitingDetailsFor = false,
   }) {
     return ChatState(
       messages: messages ?? this.messages,
@@ -159,8 +173,9 @@ class ChatState extends Equatable {
       pendingConfirmationPrompt: clearPendingConfirmation
           ? null
           : (pendingConfirmationPrompt ?? this.pendingConfirmationPrompt),
-      awaitingSearchDetails:
-          awaitingSearchDetails ?? this.awaitingSearchDetails,
+      awaitingDetailsFor: clearAwaitingDetailsFor
+          ? null
+          : (awaitingDetailsFor ?? this.awaitingDetailsFor),
     );
   }
 
@@ -182,6 +197,6 @@ class ChatState extends Equatable {
     suggestions,
     pendingConfirmationMessage,
     pendingConfirmationPrompt,
-    awaitingSearchDetails,
+    awaitingDetailsFor,
   ];
 }

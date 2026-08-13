@@ -48,6 +48,10 @@ const _affirmationFiller = <String>{
   'thanks',
   'thank',
   'you',
+  // "yes, upgrade me" / "yes, book my seat" — the pronoun the passenger
+  // attaches to the action verb.
+  'me',
+  'my',
 };
 
 const _declineCore = <String>{
@@ -82,7 +86,12 @@ const _declineFiller = <String>{
   "let's",
 };
 
-bool _matches(String transcript, Set<String> core, Set<String> filler) {
+bool _matches(
+  String transcript,
+  Set<String> core,
+  Set<String> filler,
+  Set<String> alsoAllowed,
+) {
   final words = _normalize(transcript).split(' ').where((w) => w.isNotEmpty);
   if (words.isEmpty) return false;
 
@@ -92,9 +101,27 @@ bool _matches(String transcript, Set<String> core, Set<String> filler) {
       sawCore = true;
       continue;
     }
-    if (!filler.contains(word)) return false;
+    if (!filler.contains(word) && !alsoAllowed.contains(word)) return false;
   }
   return sawCore;
+}
+
+/// The words of whatever the assistant is currently asking about.
+///
+/// People answer a question using the words of the question — "yes, cancel it",
+/// "yes, upgrade me". Without this those utterances match nothing: the action's
+/// own verb is not filler, and any unrecognized word disqualifies the whole
+/// phrase. Worse, `cancel` is itself a *decline* word, so the most natural way
+/// to approve a cancellation read as neither an approval nor a refusal and was
+/// posted to the backend as a brand new request.
+///
+/// Scoped to the pending action on purpose, never merged into the global sets.
+/// `cancel` means "call it off" when a booking is awaiting approval and "do the
+/// thing" when a cancellation is — so allowing it everywhere would turn "yes,
+/// cancel" into an approval of the booking the passenger was trying to stop.
+Set<String> _actionWords(String pendingAction) {
+  if (pendingAction.trim().isEmpty) return const {};
+  return _normalize(pendingAction).split(' ').where((w) => w.isNotEmpty).toSet();
 }
 
 String _normalize(String input) => input
@@ -108,12 +135,29 @@ String _normalize(String input) => input
 /// The whole utterance has to be affirmative. "Yes, but change the date first"
 /// is a new request, not an approval, and treating it as one would book the
 /// wrong thing.
-bool isAffirmation(String transcript) =>
-    _matches(transcript, _affirmationCore, _affirmationFiller);
+///
+/// [pendingAction] is what the assistant is waiting on — e.g. `cancel my
+/// booking` — whose own words are then allowed alongside the yes. See
+/// [_actionWords] for why that is scoped rather than global.
+bool isAffirmation(String transcript, {String pendingAction = ''}) => _matches(
+      transcript,
+      _affirmationCore,
+      _affirmationFiller,
+      _actionWords(pendingAction),
+    );
 
 /// Whether [transcript] rejects a pending action.
-bool isDecline(String transcript) =>
-    _matches(transcript, _declineCore, _declineFiller);
+///
+/// Takes [pendingAction] for the same reason as [isAffirmation] — "no, don't
+/// cancel it" needs the verb to be sayable. Safe in the other direction too:
+/// declining only drops local state, so a false positive costs a repeated
+/// question rather than money.
+bool isDecline(String transcript, {String pendingAction = ''}) => _matches(
+      transcript,
+      _declineCore,
+      _declineFiller,
+      _actionWords(pendingAction),
+    );
 
 /// Whether [transcript] is the microphone hearing the assistant rather than
 /// the passenger.

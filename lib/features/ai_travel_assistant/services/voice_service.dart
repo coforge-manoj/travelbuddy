@@ -29,10 +29,14 @@ abstract interface class ConversationVoicePort {
   /// retrying — a silent passenger is not the same problem as a busy recognizer.
   /// [onStatus] reports the recognizer's own lifecycle, which is how the loop
   /// knows the previous session really closed before reopening.
+  /// [onLevel] carries the raw microphone level, for an orb that moves with the
+  /// passenger's voice rather than on a timer. Raw and unsmoothed — see
+  /// `MicLevelMeter`. Optional because not every platform reports it.
   Future<bool> startListening({
     required void Function(String transcript, bool isFinal) onResult,
     void Function(String errorCode, bool permanent)? onError,
     void Function(String status)? onStatus,
+    void Function(double level)? onLevel,
     String localeId,
   });
 
@@ -138,6 +142,7 @@ class VoiceService implements ConversationVoicePort {
     required void Function(String transcript, bool isFinal) onResult,
     void Function(String errorCode, bool permanent)? onError,
     void Function(String status)? onStatus,
+    void Function(double level)? onLevel,
     String localeId = 'en_US',
     Duration pauseFor = defaultPauseFor,
     Duration listenFor = defaultListenFor,
@@ -153,6 +158,10 @@ class VoiceService implements ConversationVoicePort {
 
     await _speech.listen(
       onResult: (result) => onResult(result.recognizedWords, result.finalResult),
+      // Passed straight through, unsmoothed. The recognizer reports on its own
+      // schedule — roughly 10-20Hz, and on some platforms not at all — so
+      // conditioning it for an animation is the caller's job.
+      onSoundLevelChange: onLevel,
       listenOptions: stt.SpeechListenOptions(
         partialResults: true,
         // Was true, which cancelled the whole session on any error. In a

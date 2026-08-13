@@ -5,6 +5,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_conversation_controller.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_conversation_state.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_suggestion_chips.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/voice/voice_card_stage.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/voice/voice_orb.dart';
 
@@ -101,10 +102,26 @@ class _VoiceConversationPageState extends ConsumerState<VoiceConversationPage>
                 fallbackText: lastAssistantText,
               ),
             ),
+            // The backend's own follow-ups. Audio mode used to drop them
+            // entirely, which left several steps of the journey — checking in,
+            // upgrading, pulling up trip details — with no way to discover they
+            // were available. They are also spoken, so a passenger who is not
+            // looking still hears them; see `ChatViewModel`.
+            ChatSuggestionChips(
+              suggestions: chat.suggestions,
+              // Through the loop, not straight to the chat: tapping "Yes,
+              // cancel it" and saying it have to mean the same thing, and only
+              // the loop knows the words approve something already pending.
+              onSelected: controller.say,
+            ),
             _CaptionStrip(state: voice),
             const SizedBox(height: 8),
             VoiceOrb(
               phase: voice.phase,
+              // Handed the notifier itself, not a value read here: levels
+              // arrive far faster than this page should rebuild, and only the
+              // orb reads them.
+              level: controller.micLevel,
               onTap: () => voice.phase == VoicePhase.idle
                   ? controller.resume()
                   : controller.interrupt(),
@@ -160,11 +177,17 @@ class _CaptionStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final grey = theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6);
 
+    // What the assistant said back on being asked, shown for as long as the
+    // answer takes. It replaces "Thinking…" because it says the same thing with
+    // the one addition that matters: what it thinks it was asked for.
+    final acknowledgement =
+        state.acknowledgement.isEmpty ? 'Thinking…' : state.acknowledgement;
+
     final caption = switch (state.phase) {
       VoicePhase.capturing => state.partialTranscript,
       VoicePhase.listening => 'Listening…',
       VoicePhase.preparing => 'Getting ready…',
-      VoicePhase.thinking => 'Thinking…',
+      VoicePhase.thinking || VoicePhase.acknowledging => acknowledgement,
       VoicePhase.speaking => 'Speaking…',
       VoicePhase.recovering => state.message ?? 'One moment…',
       VoicePhase.permissionDenied =>
@@ -184,7 +207,11 @@ class _CaptionStrip extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: state.phase == VoicePhase.capturing
                 ? theme.textTheme.titleMedium
-                : theme.textTheme.bodyMedium?.copyWith(color: grey),
+                : theme.textTheme.bodyMedium?.copyWith(
+                    // The acknowledgement is the assistant talking, not a
+                    // status line, so it is not greyed out like one.
+                    color: state.isSpeaking ? null : grey,
+                  ),
           ),
         ),
       ),

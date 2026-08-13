@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ai_travel_assistant/core/di/providers.dart';
+import 'package:ai_travel_assistant/core/services/shared_preferences_provider.dart';
 import 'package:ai_travel_assistant/core/utils/result.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/repositories/chat_history_repository.dart';
@@ -45,10 +47,14 @@ void main() {
   }
 
   testWidgets('leaving and re-opening the chat screen starts a fresh session', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           chatHistoryRepositoryProvider.overrideWithValue(_FakeChatHistoryRepository()),
+          sharedPreferencesProvider.overrideWithValue(preferences),
         ],
         child: MaterialApp(
           home: Builder(
@@ -72,7 +78,7 @@ void main() {
 
     await openChat();
     expect(find.byType(ChatPage), findsOneWidget);
-    expect(find.textContaining('Hello Joe'), findsOneWidget);
+    expect(find.textContaining('Hello Elena'), findsOneWidget);
     expect(find.text('Flight options'), findsOneWidget);
     expect(find.text('Choose a seat'), findsNothing);
 
@@ -95,7 +101,7 @@ void main() {
 
     // Fresh session: no leftover booking flow, just the welcome + offers again.
     expect(find.text('Choose a seat'), findsNothing);
-    expect(find.textContaining('Hello Joe'), findsOneWidget);
+    expect(find.textContaining('Hello Elena'), findsOneWidget);
     expect(find.text('Flight options'), findsOneWidget);
   });
 }

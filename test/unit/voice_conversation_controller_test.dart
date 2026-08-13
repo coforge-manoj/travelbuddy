@@ -24,6 +24,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_conversation_controller.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_conversation_state.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/acknowledgement_composer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
 import '../mocks/mocks.dart';
@@ -44,6 +45,7 @@ class _FakeVoicePort implements ConversationVoicePort {
 
   void Function(String transcript, bool isFinal)? _onResult;
   void Function(String errorCode, bool permanent)? _onError;
+  void Function(double level)? _onLevel;
 
   @override
   Future<bool> ensureReady() async => ready;
@@ -56,6 +58,7 @@ class _FakeVoicePort implements ConversationVoicePort {
     required void Function(String transcript, bool isFinal) onResult,
     void Function(String errorCode, bool permanent)? onError,
     void Function(String status)? onStatus,
+    void Function(double level)? onLevel,
     String localeId = 'en_US',
   }) async {
     if (!ready) return false;
@@ -63,8 +66,12 @@ class _FakeVoicePort implements ConversationVoicePort {
     _listening = true;
     _onResult = onResult;
     _onError = onError;
+    _onLevel = onLevel;
     return true;
   }
+
+  /// Lets a test push microphone levels the way the recognizer would.
+  void emitLevel(double level) => _onLevel?.call(level);
 
   @override
   Future<void> stopListening() async {
@@ -176,9 +183,22 @@ void main() {
       ),
     );
     when(() => chat.lastSpokenLine).thenReturn('Your gate is B twelve.');
-    when(() => chat.sendMessage(any())).thenAnswer((_) async {});
-    when(() => chat.confirmPendingAction()).thenAnswer((_) async {});
-    when(() => chat.declinePendingAction()).thenReturn(null);
+    when(
+      () => chat.sendMessage(
+        any(),
+        acknowledgement: any(named: 'acknowledgement'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => chat.confirmPendingAction(
+        acknowledgement: any(named: 'acknowledgement'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => chat.declinePendingAction(
+        acknowledgement: any(named: 'acknowledgement'),
+      ),
+    ).thenReturn(null);
     when(() => chat.abortSpeechQueue()).thenReturn(null);
     when(() => chat.toggleVoiceOutput()).thenReturn(null);
 
@@ -213,7 +233,12 @@ void main() {
       voice.say('check me in');
       await settle();
       expect(c.state.phase, VoicePhase.thinking);
-      verify(() => loop.chat.sendMessage('check me in')).called(1);
+      verify(
+        () => loop.chat.sendMessage(
+          'check me in',
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      ).called(1);
 
       activity.add(SpeechActivity.playing);
       await settle();
@@ -225,6 +250,69 @@ void main() {
       // The whole point: the microphone reopened on its own.
       expect(c.state.phase, VoicePhase.listening);
       expect(voice.startCount, 2);
+    });
+
+    test('answers back before the answer exists', () async {
+      final loop = buildLoop();
+      final c = loop.controller;
+      await c.start();
+
+      voice.say('can you help me with my trip details');
+      await settle();
+
+      // Not "Thinking…" with a spinner: the passenger hears what was
+      // understood while the backend is still working on it.
+      final captured = verify(
+        () => loop.chat.sendMessage(
+          any(),
+          acknowledgement: captureAny(named: 'acknowledgement'),
+        ),
+      ).captured.single as String?;
+
+      expect(captured, contains('your trip details'));
+      expect(c.state.acknowledgement, captured);
+    });
+
+    test('the line said up front does not hand the turn back', () async {
+      final loop = buildLoop();
+      final c = loop.controller;
+      await c.start();
+      voice.say('what is my gate');
+      await settle();
+      final startsBefore = voice.startCount;
+
+      // The acknowledgement plays and finishes — but the answer has not
+      // arrived. Reopening here would invite the passenger to speak and then
+      // talk over them the moment the backend replied.
+      activity.add(SpeechActivity.acknowledging);
+      await settle(const Duration(milliseconds: 30));
+
+      expect(c.state.phase, VoicePhase.acknowledging);
+      expect(voice.startCount, startsBefore);
+
+      // And the answer, when it comes, still drives the loop as before.
+      activity.add(SpeechActivity.playing);
+      await settle();
+      expect(c.state.phase, VoicePhase.speaking);
+      activity.add(SpeechActivity.settled);
+      await settle(const Duration(milliseconds: 30));
+      expect(voice.startCount, startsBefore + 1);
+    });
+
+    test('a turn that stalls after acknowledging still recovers', () async {
+      final loop = buildLoop();
+      final c = loop.controller;
+      await c.start();
+      voice.say('book me a flight to Delhi');
+      await settle();
+
+      // `playing` cancels the watchdog because the turn is over. This must
+      // not: the backend has said nothing yet.
+      activity.add(SpeechActivity.acknowledging);
+      await settle(const Duration(milliseconds: 120));
+
+      expect(c.state.phase, isNot(VoicePhase.acknowledging));
+      expect(voice.startCount, greaterThan(1));
     });
 
     test('reopens once per turn, not once per message', () async {
@@ -244,6 +332,79 @@ void main() {
     });
   });
 
+  group('microphone level', () {
+    test('reaches the orb without going through the state', () async {
+      // Levels arrive at roughly 10-20Hz. Routed through VoiceConversationState
+      // every one of them would rebuild the page and every card on it, so the
+      // orb reads them off a notifier instead.
+      final c = buildLoop().controller;
+      await c.start();
+
+      final before = c.state;
+      voice.emitLevel(10);
+
+      expect(c.micLevel.value, greaterThan(0));
+      expect(c.state, same(before));
+    });
+
+    test('a louder voice moves it further', () async {
+      final c = buildLoop().controller;
+      await c.start();
+
+      for (var i = 0; i < 20; i++) {
+        voice.emitLevel(2);
+      }
+      final quiet = c.micLevel.value;
+
+      for (var i = 0; i < 20; i++) {
+        voice.emitLevel(10);
+      }
+
+      expect(c.micLevel.value, greaterThan(quiet));
+    });
+
+    test('drops to silence when the turn ends', () async {
+      // Otherwise the orb sits inflated at the size of the passenger's last
+      // word for the whole of the wait that follows.
+      final c = buildLoop().controller;
+      await c.start();
+      for (var i = 0; i < 20; i++) {
+        voice.emitLevel(10);
+      }
+      expect(c.micLevel.value, greaterThan(0));
+
+      voice.say('check me in');
+      await settle();
+
+      expect(c.micLevel.value, 0);
+    });
+
+    test('drops to silence on an interruption', () async {
+      final c = buildLoop().controller;
+      await c.start();
+      for (var i = 0; i < 20; i++) {
+        voice.emitLevel(10);
+      }
+
+      await c.interrupt();
+
+      expect(c.micLevel.value, 0);
+    });
+
+    test('a level from a closed session is ignored', () async {
+      // The recognizer can call back after the session has concluded; acting on
+      // it would revive the orb mid-answer.
+      final c = buildLoop().controller;
+      await c.start();
+      voice.say('check me in');
+      await settle();
+
+      voice.emitLevel(10);
+
+      expect(c.micLevel.value, 0);
+    });
+  });
+
   group('interrupting', () {
     test('discards the half-spoken sentence instead of sending it', () async {
       final loop = buildLoop();
@@ -257,7 +418,12 @@ void main() {
       // the abandoned fragment as the passenger's next message.
       expect(voice.cancelCount, greaterThan(0));
       expect(voice.stopCount, 0);
-      verifyNever(() => loop.chat.sendMessage(any()));
+      verifyNever(
+        () => loop.chat.sendMessage(
+          any(),
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      );
       expect(c.state.phase, VoicePhase.idle);
     });
 
@@ -304,8 +470,17 @@ void main() {
 
       // Routed through sendMessage, "cancel my booking" answered with "yes"
       // comes back "Left it as it was" while the UI reports it cancelled.
-      verify(() => loop.chat.confirmPendingAction()).called(1);
-      verifyNever(() => loop.chat.sendMessage(any()));
+      verify(
+        () => loop.chat.confirmPendingAction(
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      ).called(1);
+      verifyNever(
+        () => loop.chat.sendMessage(
+          any(),
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      );
     });
 
     test('a qualified yes is sent as a normal message', () async {
@@ -316,12 +491,23 @@ void main() {
       voice.say('yes but make it the morning flight');
       await settle();
 
-      verifyNever(() => loop.chat.confirmPendingAction());
-      verify(() => loop.chat.sendMessage('yes but make it the morning flight'))
-          .called(1);
+      verifyNever(
+        () => loop.chat.confirmPendingAction(
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      );
+      verify(
+        () => loop.chat.sendMessage(
+          'yes but make it the morning flight',
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      ).called(1);
     });
 
-    test('a spoken no declines and keeps listening', () async {
+    test('a spoken no is answered out loud, not with silence', () async {
+      // Audio mode has no confirmation bar to visibly disappear. Without a
+      // spoken line a refusal is met with silence, which the passenger reads as
+      // the microphone having missed them.
       final loop = buildLoop(needsConfirmation: true);
       final c = loop.controller;
       await c.start();
@@ -329,8 +515,108 @@ void main() {
       voice.say('no, not now');
       await settle(const Duration(milliseconds: 30));
 
-      verify(() => loop.chat.declinePendingAction()).called(1);
+      verify(
+        () => loop.chat.declinePendingAction(
+          acknowledgement: any(named: 'acknowledgement', that: isNotEmpty),
+        ),
+      ).called(1);
+
+      // The refusal is being spoken, so the microphone stays shut rather than
+      // opening over the top of it — the loop is half-duplex.
+      expect(voice.startCount, 1);
+
+      activity.add(SpeechActivity.settled);
+      await settle(const Duration(milliseconds: 30));
       expect(voice.startCount, 2);
+    });
+
+    test('answering a pending question with something else says so', () async {
+      // The approval lapses either way — `sendMessage` clears it. On screen the
+      // bar goes; spoken, it has to be stated, or the passenger's next "yes"
+      // lands on nothing.
+      final loop = buildLoop(needsConfirmation: true);
+      final c = loop.controller;
+      await c.start();
+
+      voice.say('how much was that again');
+      await settle();
+
+      final spoken = verify(
+        () => loop.chat.sendMessage(
+          'how much was that again',
+          acknowledgement: captureAny(named: 'acknowledgement'),
+        ),
+      ).captured.single as String?;
+
+      expect(spoken, isNotNull);
+      expect(
+        AcknowledgementComposer.droppedNotes.any(spoken!.startsWith),
+        isTrue,
+        reason: 'should lead with the note that the approval lapsed, got '
+            '"$spoken"',
+      );
+    });
+  });
+
+  group('tapping a suggestion', () {
+    test('goes through the loop, not around it', () async {
+      final loop = buildLoop();
+      final c = loop.controller;
+      await c.start();
+
+      await c.say('Check me in');
+      await settle();
+
+      // Same path as speaking it: the microphone is closed first, and the turn
+      // gets the acknowledgement and watchdog every other turn gets.
+      expect(voice.cancelCount, greaterThan(0));
+      expect(c.state.phase, VoicePhase.thinking);
+      verify(
+        () => loop.chat.sendMessage(
+          'Check me in',
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      ).called(1);
+    });
+
+    test('a chip that approves a pending action confirms it', () async {
+      // "Yes, cancel it" is a suggestion the backend sends on exactly the turn
+      // where it is also an approval. Routed to sendMessage it would be
+      // re-parsed as a fresh request and the cancellation would be lost.
+      final loop = buildLoop(needsConfirmation: true);
+      final c = loop.controller;
+      await c.start();
+
+      await c.say('Yes, cancel it');
+      await settle();
+
+      verify(
+        () => loop.chat.confirmPendingAction(
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      ).called(1);
+      verifyNever(
+        () => loop.chat.sendMessage(
+          any(),
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      );
+    });
+
+    test('an empty tap does nothing', () async {
+      final loop = buildLoop();
+      final c = loop.controller;
+      await c.start();
+
+      await c.say('   ');
+      await settle();
+
+      verifyNever(
+        () => loop.chat.sendMessage(
+          any(),
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      );
     });
   });
 
@@ -383,7 +669,12 @@ void main() {
       voice.say('check me in');
       await settle();
 
-      verify(() => loop.chat.sendMessage('check me in')).called(1);
+      verify(
+        () => loop.chat.sendMessage(
+          'check me in',
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      ).called(1);
     });
 
     test('a recoverable fault retries', () async {
@@ -414,7 +705,12 @@ void main() {
       await settle(const Duration(milliseconds: 30));
 
       // Answering it would put the assistant in conversation with itself.
-      verifyNever(() => loop.chat.sendMessage('your gate is B twelve'));
+      verifyNever(
+        () => loop.chat.sendMessage(
+          'your gate is B twelve',
+          acknowledgement: any(named: 'acknowledgement'),
+        ),
+      );
     });
   });
 

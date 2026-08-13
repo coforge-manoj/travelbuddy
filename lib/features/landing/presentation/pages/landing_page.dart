@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:ai_travel_assistant/core/services/active_account_store.dart';
 import 'package:ai_travel_assistant/core/services/concierge_visibility_store.dart';
+import 'package:ai_travel_assistant/features/account/presentation/pages/account_list_page.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/routes/ai_travel_assistant_routes.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/presentation/pages/scenario_chat_page.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/presentation/widgets/concierge_moments_list.dart';
@@ -17,7 +19,7 @@ const _veloAccentRed = Color(0xFFFF5C44);
 class LandingPage extends ConsumerWidget {
   const LandingPage({super.key});
 
-  static const _heroImageUrl = 'assets/images/LandingPage_BG.png';
+  static const _heroImageUrl = 'assets/images/LandingPage_BG.webp';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,7 +43,11 @@ class LandingPage extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const SizedBox(height: 20),
-                          const _GreetingHeader(name: 'Joe'),
+                          _GreetingHeader(
+                            name: ref.watch(activeAccountProvider).firstName,
+                            onTap: () => Navigator.of(context)
+                                .push(AccountListPage.route()),
+                          ),
                           const SizedBox(height: 16),
                           const _VeloSkyPassCard(),
                           const SizedBox(height: 16),
@@ -114,7 +120,7 @@ class _HeroSection extends StatelessWidget {
       height: 330,
       width: double.infinity,
       child: Stack(
-        fit: StackFit.expand,
+        fit: StackFit.loose,
         children: [
           Image.asset(
             imageUrl,
@@ -184,19 +190,39 @@ class _HeroIconButton extends StatelessWidget {
   }
 }
 
+/// The name doubles as the demo account switcher — tapping it opens the
+/// list of passengers the app can run as.
 class _GreetingHeader extends StatelessWidget {
-  const _GreetingHeader({required this.name});
+  const _GreetingHeader({required this.name, required this.onTap});
 
   final String name;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      'Hi, $name',
-      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Hi, $name',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.expand_more, size: 24, color: Colors.black54),
+            ],
           ),
+        ),
+      ),
     );
   }
 }
@@ -465,7 +491,7 @@ class _PromoCarousel extends StatelessWidget {
       title: 'Turn everyday spending into unforgettable journeys',
       body:
           'Earn up to 20,000 VeloMiles and unlock exclusive travel rewards. Limited-time offer.',
-      imagePath: 'assets/images/Promo1.png',
+      imagePath: 'assets/images/Promo1.webp',
       colors: [Color(0xFF6B5643), Color(0xFF2E2A26)],
     ),
     (

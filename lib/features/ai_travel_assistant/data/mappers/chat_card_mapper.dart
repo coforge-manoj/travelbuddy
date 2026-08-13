@@ -9,6 +9,25 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/se
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/travel_history_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/upgrade_quote_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/journey/journey_stage.dart';
+
+/// How a TravelBuddy `/chat` turn should be handled by the client.
+enum TurnOutcome {
+  /// The turn produced a card (or is waiting on confirmation).
+  result,
+
+  /// Backend asked the passenger to approve a mutating action.
+  awaitingApproval,
+
+  /// A collecting stage is still gathering required details.
+  collecting,
+
+  /// A stage that expects a card produced nothing actionable.
+  misfire,
+
+  /// No known stage, or a stage that leaves the reply alone.
+  conversational,
+}
 
 /// One rendered card: the [ChatMessageType] the UI switches on, and the
 /// domain object behind it.
@@ -67,34 +86,51 @@ class ChatCardMapper {
     return CardJson.asStringList(data['suggestions']);
   }
 
-  /// True when the backend is still collecting the origin, destination and
-  /// date for a search — it answers "I need an origin, a destination and a
-  /// date." under `tool: search_flights` with nothing to render.
+  /// True when the backend is still collecting details for a stage — today
+  /// that is still origin/destination/date for search, but any
+  /// [JourneyStage.collects] tool uses the same path.
   ///
-  /// This is what tells a half-finished search apart from a journey turn.
-  /// The passenger's next message has to be merged into the search being
-  /// assembled (see `ConversationRouterService`) rather than posted to
-  /// `/chat` verbatim, which is right for every other turn.
+  /// Kept as a named helper so existing call sites and tests stay readable;
+  /// it is exactly `outcomeOf(data) == TurnOutcome.collecting`.
+  static bool needsSearchDetails(Map<String, dynamic> data) =>
+      outcomeOf(data) == TurnOutcome.collecting;
+
+  /// Classifies a `/chat` envelope so the viewmodel can collect, repair, or
+  /// leave the turn alone.
   ///
-  /// Safe by construction: a journey turn always either carries a card or
-  /// is waiting on a confirmation, and a no-op reply such as "Left it as it
-  /// was." comes back under a different tool.
-  static bool needsSearchDetails(Map<String, dynamic> data) {
-    if (_producedResult(data)) return false;
-    final tool = CardJson.asString(data['tool'])?.toLowerCase();
-    return tool != null && _searchFlightsTools.contains(tool);
+  /// Order matters: a card or confirmation is always a success; only then
+  /// do we consult the stage table. Unknown tools fall through to
+  /// [TurnOutcome.conversational], which is today's behaviour.
+  static TurnOutcome outcomeOf(Map<String, dynamic> data) {
+    if (_hasCards(data)) return TurnOutcome.result;
+    if (data['needsConfirmation'] == true) {
+      return TurnOutcome.awaitingApproval;
+    }
+
+    final stage = JourneyStage.forTool(CardJson.asString(data['tool']));
+    if (stage == null) return TurnOutcome.conversational;
+    if (stage.collects) return TurnOutcome.collecting;
+    if (stage.expects.isNotEmpty) return TurnOutcome.misfire;
+    return TurnOutcome.conversational;
   }
 
-  /// Both spellings the backend has used for the search tool.
-  static const _searchFlightsTools = <String>{'search_flights', 'search_flight'};
+  /// The stage for this turn, or `null` when the tool is unknown.
+  static JourneyStage? stageOf(Map<String, dynamic> data) =>
+      JourneyStage.forTool(CardJson.asString(data['tool']));
 
   /// Whether a turn came back with something to act on. Deliberately keyed
   /// off the backend's own `cards`, not the cards this client managed to
   /// map, so a card type we cannot draw yet still counts as a result.
+  ///
+  /// Confirmation-only turns also count — the passenger has something to
+  /// approve even when no card was drawn yet.
   static bool _producedResult(Map<String, dynamic> data) {
+    return _hasCards(data) || data['needsConfirmation'] == true;
+  }
+
+  static bool _hasCards(Map<String, dynamic> data) {
     final cards = data['cards'];
-    return (cards is List && cards.isNotEmpty) ||
-        data['needsConfirmation'] == true;
+    return cards is List && cards.isNotEmpty;
   }
 
   /// Card types the client knows how to draw. Anything outside this set

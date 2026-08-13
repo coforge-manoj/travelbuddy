@@ -8,9 +8,19 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_conversation_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_transcript_rules.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/acknowledgement_composer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice/mic_level_meter.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
-/// Drives the hands-free conversation: listen, send, speak, listen again.
+/// Drives the hands-free conversation: listen, answer back, send, speak,
+/// listen again.
+///
+/// **The assistant speaks twice per turn.** The moment a request is sent it
+/// says what it understood and what it is about to do — see
+/// [AcknowledgementComposer] — and the answer follows when it arrives. That
+/// middle line is the difference between a conversation and a form submission:
+/// the wait is the same length either way, but only one of them leaves the
+/// passenger wondering whether they were heard.
 ///
 /// Owns the loop, not the conversation. Messages, cards and the backend session
 /// all stay in [ChatViewModel] — this reads its state, calls its methods, and
@@ -34,16 +44,24 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
   VoiceConversationController({
     required ConversationVoicePort voice,
     required ChatViewModel chat,
+    AcknowledgementComposer? acknowledgements,
     this.reopenDelay = const Duration(milliseconds: 350),
     this.recoveryDelay = const Duration(milliseconds: 800),
     this.thinkingTimeout = const Duration(seconds: 20),
     this.silentTurnLimit = 2,
   })  : _voice = voice,
         _chat = chat,
+        _acknowledgements = acknowledgements ?? AcknowledgementComposer(),
         super(const VoiceConversationState());
 
   final ConversationVoicePort _voice;
   final ChatViewModel _chat;
+
+  /// Words the wait, so the passenger hears what was understood while the
+  /// answer is still being fetched. Held per loop rather than per turn: it
+  /// remembers what it last said so a conversation does not open every turn the
+  /// same way.
+  final AcknowledgementComposer _acknowledgements;
 
   /// How long to wait after the assistant stops before reopening the
   /// microphone.
@@ -61,6 +79,26 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
 
   /// How many silent turns in a row before the loop stops asking.
   final int silentTurnLimit;
+
+  /// The passenger's microphone level, 0..1, for the orb to animate from.
+  ///
+  /// **Deliberately not part of [VoiceConversationState].** The recognizer
+  /// reports at roughly 10-20Hz, and every one of those samples would be a new
+  /// state object — rebuilding the page, `VoiceCardStage` and every card widget
+  /// under it, several times a second, for a number only the orb reads. A
+  /// notifier with a stable identity lets the orb listen on its own.
+  ///
+  /// A *target*, not a radius: the orb interpolates towards it each frame. Read
+  /// directly it would stair-step, because the samples arrive far slower than
+  /// the display refreshes.
+  final ValueNotifier<double> micLevel = ValueNotifier<double>(0);
+
+  /// Stays at zero on a platform that never reports a level — `speech_to_text`
+  /// does not promise the callback, and does not document what Android's value
+  /// even means. The orb handles that by blending a breathe in as the level
+  /// falls, so a silent meter and a passenger mid-pause both keep it moving;
+  /// nothing here needs to detect the difference.
+  final MicLevelMeter _meter = MicLevelMeter();
 
   StreamSubscription<SpeechActivity>? _speechSubscription;
   Timer? _reopenTimer;
@@ -132,12 +170,14 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
   Future<void> interrupt() async {
     _turn++;
     _cancelTimers();
+    _silenceMic();
     await _voice.cancelListening();
     _chat.abortSpeechQueue();
     if (!mounted) return;
     state = state.copyWith(
       phase: VoicePhase.idle,
       partialTranscript: '',
+      acknowledgement: '',
       clearMessage: true,
     );
   }
@@ -146,6 +186,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
   Future<void> stop() async {
     _turn++;
     _cancelTimers();
+    _silenceMic();
     await _speechSubscription?.cancel();
     _speechSubscription = null;
     await _voice.cancelListening();
@@ -157,6 +198,29 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
   /// Reopens the microphone after the loop has gone [VoicePhase.idle] —
   /// the passenger tapping to start talking again.
   Future<void> resume() => start();
+
+  /// A suggestion chip tapped in audio mode.
+  ///
+  /// Goes through the same path as a spoken utterance rather than straight to
+  /// `ChatViewModel.sendMessage`, so the loop keeps its phase, its watchdog and
+  /// its confirmation handling. Tapping "Yes, cancel it" and saying it have to
+  /// mean the same thing — and only this path knows that the words approve
+  /// something already pending.
+  ///
+  /// The microphone is cancelled rather than stopped: whatever half-sentence
+  /// was in progress belongs to a turn the passenger has just abandoned in
+  /// favour of the chip.
+  Future<void> say(String utterance) async {
+    final text = utterance.trim();
+    if (text.isEmpty || _chat.state.isBusy) return;
+
+    _cancelTimers();
+    _conclude();
+    await _voice.cancelListening();
+    if (!mounted) return;
+
+    await _submit(text);
+  }
 
   void onAppLifecycle(AppLifecycleState lifecycle) {
     switch (lifecycle) {
@@ -188,7 +252,13 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
     final turn = _turn;
     final session = ++_micSession;
     _sessionConcluded = false;
-    state = state.copyWith(phase: VoicePhase.listening, partialTranscript: '');
+    _silenceMic();
+    state = state.copyWith(
+      phase: VoicePhase.listening,
+      partialTranscript: '',
+      // The previous turn's opening line has been overtaken by its answer.
+      acknowledgement: '',
+    );
     _sinceReopened = Stopwatch()..start();
 
     try {
@@ -197,6 +267,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
             _onTranscript(session, transcript, isFinal),
         onError: (code, permanent) =>
             _onRecognizerError(session, code, permanent),
+        onLevel: (level) => _onLevel(session, level),
       );
 
       if (turn != _turn || !mounted) return;
@@ -222,7 +293,26 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
       session == _micSession && !_sessionConcluded && mounted;
 
   /// Marks this listening session finished, so no later callback can act on it.
-  void _conclude() => _sessionConcluded = true;
+  ///
+  /// Silences the meter too: every path that ends a listening session goes
+  /// through here, and a meter left holding its last sample leaves the orb
+  /// inflated at the size of the passenger's final word for the whole of the
+  /// wait that follows.
+  void _conclude() {
+    _sessionConcluded = true;
+    _silenceMic();
+  }
+
+  /// Drops the level to zero without waiting for it to decay.
+  void _silenceMic() {
+    _meter.reset();
+    micLevel.value = 0;
+  }
+
+  void _onLevel(int session, double level) {
+    if (!_isLive(session)) return;
+    micLevel.value = _meter.add(level);
+  }
 
   void _onTranscript(int session, String transcript, bool isFinal) {
     if (!_isLive(session)) return;
@@ -262,31 +352,62 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
 
   Future<void> _submit(String transcript) async {
     final turn = _turn;
-    state = state.copyWith(
-      phase: VoicePhase.thinking,
-      partialTranscript: transcript,
-      consecutiveSilentTurns: 0,
-    );
-    _startWatchdog(turn);
 
     // A spoken "yes" while something is pending has to go through
     // confirmPendingAction, which sends the affirmation the backend honours.
     // Routed through sendMessage it would be re-parsed as a fresh request —
     // "cancel my booking" answered with "yes" comes back "Left it as it was",
     // and the UI would report a cancellation that never happened.
-    if (_chat.state.needsConfirmation) {
-      if (isAffirmation(transcript)) {
-        await _chat.confirmPendingAction();
-        return;
+    final pending = _chat.state.needsConfirmation;
+    // The wording of what is awaiting approval, so the passenger can answer in
+    // its own words — "yes, cancel it" is how people actually approve a
+    // cancellation, and it is the very phrasing the backend suggests.
+    final pendingAction = _chat.state.pendingConfirmationMessage ?? '';
+    final confirming =
+        pending && isAffirmation(transcript, pendingAction: pendingAction);
+    final declining =
+        pending && isDecline(transcript, pendingAction: pendingAction);
+
+    // Anything else said while an approval is waiting drops it — see
+    // `ChatViewModel.sendMessage`. On screen the confirmation bar visibly goes;
+    // spoken, it has to be said, or the passenger's next "yes" lands on nothing
+    // and is posted to the backend as a fresh request.
+    final dropsPending = pending && !confirming && !declining;
+
+    final acknowledgement = switch ((declining, dropsPending)) {
+      // Nothing is fetched for a refusal, so this line is the whole turn.
+      (true, _) => _acknowledgements.composeDecline(),
+      (_, true) => _acknowledgements.composeDropped(
+          _acknowledgements.compose(transcript),
+        ),
+      _ => _acknowledgements.compose(transcript, confirming: confirming),
+    };
+
+    state = state.copyWith(
+      phase: VoicePhase.thinking,
+      partialTranscript: transcript,
+      acknowledgement: acknowledgement,
+      consecutiveSilentTurns: 0,
+    );
+    _startWatchdog(turn);
+
+    if (confirming) {
+      await _chat.confirmPendingAction(acknowledgement: acknowledgement);
+      return;
+    }
+    if (declining) {
+      _chat.declinePendingAction(acknowledgement: acknowledgement);
+      // The spoken refusal hands the turn back when it settles, exactly as an
+      // answer does. Reopening here as well would put the microphone up while
+      // the assistant is still talking, and the loop is half-duplex. The
+      // watchdog started above is the backstop if nothing is ever spoken.
+      if (acknowledgement.isEmpty && turn == _turn) {
+        unawaited(_reopenAfterGap());
       }
-      if (isDecline(transcript)) {
-        _chat.declinePendingAction();
-        if (turn == _turn) unawaited(_reopenAfterGap());
-        return;
-      }
+      return;
     }
 
-    await _chat.sendMessage(transcript);
+    await _chat.sendMessage(transcript, acknowledgement: acknowledgement);
   }
 
   void _onSpeechActivity(SpeechActivity activity) {
@@ -295,6 +416,15 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
     switch (activity) {
       case SpeechActivity.preparing:
         break;
+      case SpeechActivity.acknowledging:
+        // Audible, but the turn is not answered yet: the watchdog deliberately
+        // keeps running. Cancelling it here — as `playing` does — would leave a
+        // backend that never replies with nothing to catch it, and the loop
+        // would sit listening to its own "let me check that" forever.
+        state = state.copyWith(
+          phase: VoicePhase.acknowledging,
+          lastSpokenLine: _chat.lastSpokenLine,
+        );
       case SpeechActivity.playing:
         _watchdog?.cancel();
         // Taken from what was handed to the synthesizer, not from the last
@@ -312,6 +442,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
         // finish is nowhere near the end of the answer.
         _watchdog?.cancel();
         if (state.phase == VoicePhase.thinking ||
+            state.phase == VoicePhase.acknowledging ||
             state.phase == VoicePhase.speaking) {
           unawaited(_reopenAfterGap());
         }
@@ -398,6 +529,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
     _cancelTimers();
     unawaited(_speechSubscription?.cancel());
     _speechSubscription = null;
+    micLevel.dispose();
     super.dispose();
   }
 }

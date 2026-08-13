@@ -434,20 +434,19 @@ void _followUpTests() {
 /// partial-search flow or corrupts the journey, so it is pinned against
 /// real payloads.
 void _searchDetailTests() {
-  group('needsSearchDetails', () {
+  group('needsSearchDetails / outcomeOf', () {
     test('a half-finished search asks for the next message', () {
       // Verbatim from POST /chat "search for flight to london" on
       // 2026-08-07 — no origin, no date, nothing to render.
-      expect(
-        ChatCardMapper.needsSearchDetails({
-          'reply': 'I need an origin, a destination and a date.',
-          'tool': 'search_flights',
-          'cards': <Object>[],
-          'suggestions': ['Book the recommended one'],
-          'needsConfirmation': false,
-        }),
-        isTrue,
-      );
+      final data = {
+        'reply': 'I need an origin, a destination and a date.',
+        'tool': 'search_flights',
+        'cards': <Object>[],
+        'suggestions': ['Book the recommended one'],
+        'needsConfirmation': false,
+      };
+      expect(ChatCardMapper.needsSearchDetails(data), isTrue);
+      expect(ChatCardMapper.outcomeOf(data), TurnOutcome.collecting);
     });
 
     test('the older `search_flight` spelling counts too', () {
@@ -461,15 +460,14 @@ void _searchDetailTests() {
     });
 
     test('a search that found flights does not', () {
-      expect(
-        ChatCardMapper.needsSearchDetails({
-          'tool': 'search_flights',
-          'cards': [
-            {'type': 'flight_list', 'flights': <Object>[]},
-          ],
-        }),
-        isFalse,
-      );
+      final data = {
+        'tool': 'search_flights',
+        'cards': [
+          {'type': 'flight_list', 'flights': <Object>[]},
+        ],
+      };
+      expect(ChatCardMapper.needsSearchDetails(data), isFalse);
+      expect(ChatCardMapper.outcomeOf(data), TurnOutcome.result);
     });
 
     test('a card-less journey turn does not — this is what protects the '
@@ -477,26 +475,24 @@ void _searchDetailTests() {
       // "cancel my booking" answered with confirm:true comes back empty
       // under the cancel tool. Routing the next message through the router
       // would reword it and lose the thread.
-      expect(
-        ChatCardMapper.needsSearchDetails({
-          'reply': 'Left it as it was.',
-          'tool': 'cancel_booking',
-          'cards': <Object>[],
-        }),
-        isFalse,
-      );
+      final data = {
+        'reply': 'Left it as it was.',
+        'tool': 'cancel_booking',
+        'cards': <Object>[],
+      };
+      expect(ChatCardMapper.needsSearchDetails(data), isFalse);
+      expect(ChatCardMapper.outcomeOf(data), TurnOutcome.misfire);
     });
 
     test('a turn awaiting confirmation does not', () {
-      expect(
-        ChatCardMapper.needsSearchDetails({
-          'reply': "That's RLTYVL — AA50 DFW to LHR. Cancel it?",
-          'tool': 'cancel_booking',
-          'cards': <Object>[],
-          'needsConfirmation': true,
-        }),
-        isFalse,
-      );
+      final data = {
+        'reply': "That's RLTYVL — AA50 DFW to LHR. Cancel it?",
+        'tool': 'cancel_booking',
+        'cards': <Object>[],
+        'needsConfirmation': true,
+      };
+      expect(ChatCardMapper.needsSearchDetails(data), isFalse);
+      expect(ChatCardMapper.outcomeOf(data), TurnOutcome.awaitingApproval);
     });
 
     test('a missing or unknown tool does not', () {
@@ -505,11 +501,24 @@ void _searchDetailTests() {
         isFalse,
       );
       expect(
+        ChatCardMapper.outcomeOf({'cards': <Object>[]}),
+        TurnOutcome.conversational,
+      );
+      // list_extras is now a known stage: empty cards are a misfire, still
+      // not a collecting search.
+      expect(
         ChatCardMapper.needsSearchDetails({
           'tool': 'list_extras',
           'cards': <Object>[],
         }),
         isFalse,
+      );
+      expect(
+        ChatCardMapper.outcomeOf({
+          'tool': 'list_extras',
+          'cards': <Object>[],
+        }),
+        TurnOutcome.misfire,
       );
     });
   });

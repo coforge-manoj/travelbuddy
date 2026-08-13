@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:ai_travel_assistant/core/di/providers.dart';
+import 'package:ai_travel_assistant/core/services/active_account_store.dart';
 import 'package:ai_travel_assistant/core/services/local_notification_service.dart';
 import 'package:ai_travel_assistant/core/services/reminder_delay_store.dart';
 import 'package:ai_travel_assistant/core/services/voice_output_setting_store.dart';
@@ -13,6 +14,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/journey/journey_stage.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/book_flight_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart';
@@ -32,11 +34,13 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/ca
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_chunker.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_synthesizer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_trace.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/acknowledgement_composer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/data/scenario_catalog.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/domain/entities/proactive_scenario.dart';
 
 import '../../../../core/services/ai_services/conversation_route/conversation_route_service.dart';
+import '../../../../core/services/ai_services/humanized_response_service/response_humanizer_service.dart';
 import '../../../../core/services/ai_services/trip_discovery/trip_discovery_service.dart';
 import '../../data/models/conersation_route/trip_discovery_context.dart';
 import '../services/flight_services.dart';
@@ -49,8 +53,6 @@ const _uuid = Uuid();
 /// integration time.
 const _demoFlightNumber = 'FZ123';
 const _demoPnr = 'ABC123';
-const _demoTravelerFirstName = 'Joe';
-const _demoTravelerFullName = 'Joe Traveler';
 const _demoSearchOrigin = 'EWR';
 const _demoSearchDestination = 'ORD';
 
@@ -81,8 +83,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
     required bool Function() getVoiceOutputEnabled,
     required void Function(String? scenarioId) setPendingNextScenarioId,
     FlightServices? flightService,
+    String? travelerFirstName,
     CardSpeechTextBuilder cardSpeechTextBuilder = const CardSpeechTextBuilder(),
   })  : _flightService = flightService ?? FlightServices(),
+        _travelerFirstName =
+            travelerFirstName ?? demoAccounts.first.firstName,
         _cardSpeechTextBuilder = cardSpeechTextBuilder,
         _sendMessageUseCase = sendMessageUseCase,
         _classifyIntentUseCase = classifyIntentUseCase,
@@ -128,16 +133,19 @@ class ChatViewModel extends StateNotifier<ChatState> {
   final void Function(String? scenarioId) _setPendingNextScenarioId;
   final CardSpeechTextBuilder _cardSpeechTextBuilder;
 
+  /// The signed-in demo passenger's first name, used by the greeting. Comes
+  /// from the account switcher on Home (see `activeAccountProvider`).
+  final String _travelerFirstName;
+
   /// One per view model, so every fresh chat session gets its own
   /// `x-session-id` and therefore a clean journey on the backend — matching
   /// the local history reset in [_startNewSession].
   ///
-  /// Injectable only so tests can stand in for it. Left defaulted rather than
-  /// required because it is the one dependency the widget layer does not build:
-  /// every other collaborator arrives from `providers.dart`, and threading this
-  /// one through would mean a provider whose only purpose is the test seam.
-  /// Without it the whole `/api/v1/chat` path is unreachable under test, since
-  /// the real client posts to a hardcoded tunnel.
+  /// Built by [chatViewModelProvider] against the signed-in account's member
+  /// number, and stood in for by tests. Left defaulted rather than required
+  /// so tests that don't care about the `/api/v1/chat` path — which is
+  /// otherwise unreachable, since the real client posts to a hardcoded
+  /// tunnel — can skip it.
   final FlightServices _flightService;
 
   /// Every fresh entry into the chat screen (including navigating back and
@@ -158,7 +166,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       role: ChatRole.assistant,
       type: ChatMessageType.text,
       timestamp: DateTime.now(),
-      text: 'Hello $_demoTravelerFirstName! How can I help you today?',
+      text: 'Hello $_travelerFirstName! How can I help you today?',
     );
     state = state.copyWith(
       status: ChatStatus.idle,
@@ -166,7 +174,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       isVoiceOutputEnabled: _getVoiceOutputEnabled(),
       suggestions: const [],
       clearPendingConfirmation: true,
-      awaitingSearchDetails: false,
+      clearAwaitingDetailsFor: true,
     );
     unawaited(_saveChatMessageUseCase(welcome));
   }
@@ -245,7 +253,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       clearError: true,
       suggestions: const [],
       clearPendingConfirmation: true,
-      awaitingSearchDetails: false,
+      clearAwaitingDetailsFor: true,
     );
 
     await _handleTravelBuddyChat(userMessage: text, apiMessage: text);
@@ -281,7 +289,12 @@ class ChatViewModel extends StateNotifier<ChatState> {
       _sendJourneyMessage('Change my seat to $seatNumber');
 
   /// Entry point for the composer and suggested-prompt chips.
-  Future<void> sendMessage(String text) async {
+  ///
+  /// [acknowledgement] is a line to say straight away, before any work starts —
+  /// what audio mode fills the wait with instead of a silent orb. It is spoken
+  /// and never shown: it belongs to the moment, not to the transcript. See
+  /// [_speakAside].
+  Future<void> sendMessage(String text, {String? acknowledgement}) async {
     final trimmed = text.trim();
 
     if (trimmed.isEmpty) return;
@@ -299,11 +312,12 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: trimmed,
       ),
     );
-
-    // Read this BEFORE resetting it.
-    // This tells us whether the backend was still waiting
-    // for search details like origin/destination/date.
-    final continuesSearch = state.awaitingSearchDetails;
+    // After `stopSpeaking`, so the previous answer is cut off before this is
+    // queued rather than being cut off by it.
+    if (acknowledgement != null) _speakAside(acknowledgement);
+    // Read before the reset below: this message is the answer to whatever
+    // the backend last asked for (search details, which extra, which seat…).
+    final continuesStage = state.awaitingDetailsFor;
 
     state = state.copyWith(
       status: ChatStatus.sendingMessage,
@@ -311,15 +325,39 @@ class ChatViewModel extends StateNotifier<ChatState> {
       suggestions: const [],
 
       clearPendingConfirmation: true,
-
-      awaitingSearchDetails: false,
+      // Cleared up front so it cannot go stale on a turn that never reaches
+      // the backend (escalation, a plain AI reply); the next `/chat`
+      // response sets it again from the wire.
+      clearAwaitingDetailsFor: true,
     );
 
     // ============================================================
     // ACTIVE CONVERSATION
     // ============================================================
-
+    // If a conversation is already active, first check whether the user is
+    // continuing it or switching topics.
     if (state.activeIntent != null) {
+      // Once a journey is under way, TravelBuddy `/chat` sessions (search →
+      // select → extras → book) must keep posting follow-ups to the same
+      // endpoint verbatim — including suggestion taps like "take the
+      // cheapest one" and the plain "yes" that approves a payment. Routing
+      // those through the conversation router would re-classify and reword
+      // them, and the backend would lose the thread.
+      //
+      // The exception is a stage still collecting details: the backend has
+      // asked for something (origin/date, which extra, which seat) and this
+      // message carries the answer. That has to be merged rather than sent
+      // on its own, so it goes down the router path below.
+      if (state.activeIntent != IntentType.tripDiscovery &&
+          continuesStage == null) {
+        await _handleTravelBuddyChat(
+          userMessage: trimmed,
+          apiMessage: trimmed,
+        );
+        state = state.copyWith(status: ChatStatus.idle);
+        return;
+      }
+
       final lastAssistantMessage = state.messages
           .lastWhere(
             (e) => e.role == ChatRole.assistant,
@@ -340,6 +378,9 @@ class ChatViewModel extends StateNotifier<ChatState> {
         assistantMessage: lastAssistantMessage,
         userMessage: trimmed,
         context: state.conversationContext.toJson(),
+        stageHint: continuesStage == null
+            ? null
+            : '${continuesStage.id}: ${continuesStage.collectingHint ?? ''}',
       );
 
       print("===== ROUTER DECISION =====");
@@ -369,6 +410,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
 
         await _continueCurrentFlow(
           routerResult.normalizedPrompt,
+          stage: continuesStage,
         );
 
         state = state.copyWith(
@@ -652,17 +694,30 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
   }
 
-  Future<void> _continueCurrentFlow(String message) async {
+  Future<void> _continueCurrentFlow(
+    String message, {
+    JourneyStage? stage,
+  }) async {
     switch (state.activeIntent) {
       case IntentType.tripDiscovery:
         await _handleTripDiscovery(message);
         break;
       default:
-        // Only reachable while a search is still being assembled — the
-        // journey path returns before this. [message] is the router's
-        // normalized prompt, e.g. "flights from Delhi to London on
-        // 2026-07-26", so re-classifying it is what finally produces a
-        // complete `qnPrompt` and runs the search.
+        // Search still needs re-classification so a complete `qnPrompt` is
+        // built. Every other collecting stage posts the router's normalized
+        // prompt (or the raw message) straight to `/chat`.
+        if (stage != null && !stage.isSearch) {
+          final apiMessage = message.trim().isNotEmpty ? message : '';
+          if (apiMessage.isEmpty) return;
+          await _handleTravelBuddyChat(
+            userMessage: apiMessage,
+            apiMessage: apiMessage,
+          );
+          return;
+        }
+
+        // [message] is the router's normalized prompt, e.g. "flights from
+        // Delhi to London on 2026-07-26".
         state = state.copyWith(clearActiveIntent: true);
 
         final intentResult = await _classifyIntentUseCase(message);
@@ -712,7 +767,6 @@ class ChatViewModel extends StateNotifier<ChatState> {
             timestamp: DateTime.now(),
             text: displayText,
           ),
-          speakAs: displayText,
         );
       }
     } catch (e, stackTrace) {
@@ -743,10 +797,14 @@ class ChatViewModel extends StateNotifier<ChatState> {
   ///
   /// [confirm] re-sends [apiMessage] as an approval, which is how the
   /// Confirm button completes a booking, upgrade or cancellation.
+  ///
+  /// [isRepair] marks the one automatic re-post allowed after a misfire —
+  /// tracked here rather than in state so it cannot leak across turns.
   Future<void> _handleTravelBuddyChat({
     required String userMessage,
     required String apiMessage,
     bool confirm = false,
+    bool isRepair = false,
   }) async {
     try {
       final response = await _flightService.getFlightResponse(
@@ -760,13 +818,42 @@ class ChatViewModel extends StateNotifier<ChatState> {
       }
 
       final backendData = Map<String, dynamic>.from(data);
+      final outcome = ChatCardMapper.outcomeOf(backendData);
+      final stage = ChatCardMapper.stageOf(backendData);
+
+      // Repair once before anything is rendered. Non-mutating misfires always
+      // qualify; mutating ones only when this post was already a confirmation
+      // (the documented "Left it as it was." case) — a fresh cancel/book is
+      // never silently re-posted.
+      if (outcome == TurnOutcome.misfire &&
+          !isRepair &&
+          stage != null &&
+          stage.repairMessage != null &&
+          (!stage.mutating || confirm)) {
+        await _handleTravelBuddyChat(
+          userMessage: userMessage,
+          apiMessage: stage.repairMessage!,
+          confirm: confirm,
+          isRepair: true,
+        );
+        return;
+      }
+
       final reply = backendData['reply']?.toString() ?? '';
       final needsConfirmation =
           backendData['needsConfirmation'] == true;
 
       // Empty on a turn that produced nothing to act on — see
       // [ChatCardMapper.followUpsFrom].
-      final suggestions = ChatCardMapper.followUpsFrom(backendData);
+      var suggestions = ChatCardMapper.followUpsFrom(backendData);
+
+      // After a failed repair (or a mutating misfire we refused to retry),
+      // offer the stage's corrective chip so the passenger can decide.
+      if (outcome == TurnOutcome.misfire &&
+          stage?.correctiveChip != null &&
+          !suggestions.contains(stage!.correctiveChip)) {
+        suggestions = [...suggestions, stage.correctiveChip!];
+      }
 
       // The reply is shown as the backend worded it. There used to be an
       // awaited `ResponseHumanizerService.humanize()` call here, rewording it
@@ -789,10 +876,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
         pendingConfirmationMessage: needsConfirmation ? apiMessage : null,
         pendingConfirmationPrompt: needsConfirmation ? displayText : null,
         clearPendingConfirmation: !needsConfirmation,
-        // Set while the backend is still asking for an origin, destination
-        // or date, so the next message completes the search instead of
-        // being posted on its own.
-        awaitingSearchDetails: ChatCardMapper.needsSearchDetails(backendData),
+        // Park collecting stages so the next message is merged rather than
+        // posted on its own. Cleared explicitly on every other outcome.
+        awaitingDetailsFor:
+            outcome == TurnOutcome.collecting ? stage : null,
+        clearAwaitingDetailsFor: outcome != TurnOutcome.collecting,
       );
 
       if (displayText.isNotEmpty) {
@@ -827,8 +915,28 @@ class ChatViewModel extends StateNotifier<ChatState> {
           ),
         );
       }
+
+      // The follow-ups, spoken. On screen they are chips the passenger can
+      // read; in audio mode there may be nothing in their eyeline at all, and
+      // several steps of the journey — checking in, upgrading, trip details —
+      // are only ever offered this way.
+      //
+      // Queued through `_speakAside`, so it lands after the answer and its
+      // cards rather than racing them, and so the turn does not settle (and the
+      // microphone does not reopen) until it has been said.
+      //
+      // Skipped while something awaits approval: the backend has just asked a
+      // direct question, and offering alternatives on top of it invites an
+      // answer to the wrong one.
+      if (!needsConfirmation) {
+        _speakAside(AcknowledgementComposer.composeSuggestionLine(suggestions));
+      }
     } catch (e) {
-      _appendError('Sorry, I could not reach the flight assistant. ($e)');
+      debugPrint('TravelBuddy /chat failed: $e');
+      _appendError(
+        'Sorry, I could not reach the flight assistant.',
+        retrySuggestion: apiMessage,
+      );
     }
   }
 
@@ -844,7 +952,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
   static const _affirmation = 'yes';
 
   /// Approves the action the last turn asked about.
-  Future<void> confirmPendingAction() async {
+  ///
+  /// [acknowledgement] is spoken immediately, as in [sendMessage] — and matters
+  /// more here than anywhere else, because this is the turn that spends money
+  /// and the passenger should hear that their "yes" landed.
+  Future<void> confirmPendingAction({String? acknowledgement}) async {
     stopSpeaking();
     if (!state.needsConfirmation || state.isBusy) return;
 
@@ -857,6 +969,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: 'Yes, go ahead',
       ),
     );
+    if (acknowledgement != null) _speakAside(acknowledgement);
     state = state.copyWith(
       status: ChatStatus.sendingMessage,
       clearError: true,
@@ -876,9 +989,14 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// Drops the pending action without telling the backend anything — it only
   /// ever acts on an explicit confirmation, so leaving it unanswered is
   /// enough, and the passenger can keep typing.
-  void declinePendingAction() {
+  void declinePendingAction({String? acknowledgement}) {
     stopSpeaking();
     state = state.copyWith(clearPendingConfirmation: true);
+    // Nothing is fetched for a refusal, so this line is the entire turn. In
+    // audio mode there is no confirmation bar to visibly disappear, and without
+    // it a "no" is answered by silence — which the passenger reads as not
+    // having been heard.
+    if (acknowledgement != null) _speakAside(acknowledgement);
   }
 
   void _appendEscalationOffer() {
@@ -1116,6 +1234,37 @@ class ChatViewModel extends StateNotifier<ChatState> {
     );
   }
 
+  /// Speaks [line] without putting it in the transcript.
+  ///
+  /// For the acknowledgement said while a turn is in flight. It is heard, not
+  /// read: a bubble for it would leave the history full of "Sure, let me check
+  /// that" with the answer somewhere below, and re-reading the conversation
+  /// later would be twice as long for no more information.
+  ///
+  /// Never summarized — it is one short sentence already written for the ear,
+  /// and the summarizer's round trip is longer than the wait this is filling.
+  void _speakAside(String line) {
+    final text = line.trim();
+    if (text.isEmpty || !mounted || !state.isVoiceOutputEnabled) return;
+
+    // The echo guard compares what the microphone hears against this, and for a
+    // turn whose answer is silent (voice output off mid-turn, or an empty
+    // reply) this is the last thing that actually came out of the speaker.
+    _lastSpokenLine = text;
+    _pendingUtterances++;
+    _emitActivity(SpeechActivity.preparing);
+
+    final queued = Stopwatch()..start();
+    _speechChain = _speechChain.then(
+      (_) => _speakSafely(
+            text,
+            summarize: false,
+            queuedFor: queued,
+            aside: true,
+          ),
+    );
+  }
+
   void _commitMessage(ChatMessage message) {
     // Queued appends outlive the session: the passenger can leave while an
     // earlier reply is still synthesizing, and everything behind it in the
@@ -1191,6 +1340,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
     String speechSource, {
     bool summarize = true,
     Stopwatch? queuedFor,
+    bool aside = false,
   }) async {
     final epoch = _speechEpoch;
     final trace = SpeechTrace.begin(
@@ -1245,7 +1395,9 @@ class ChatViewModel extends StateNotifier<ChatState> {
         // a phase change the passenger never saw.
         if (!spokeAnything) {
           spokeAnything = true;
-          _emitActivity(SpeechActivity.playing);
+          _emitActivity(
+            aside ? SpeechActivity.acknowledging : SpeechActivity.playing,
+          );
         }
         await _playSpeechSafely(prepared);
       }
@@ -1265,12 +1417,38 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
   }
 
-  /// Announces the end of the turn's speech once nothing is playing and no
-  /// further utterance is about to be queued.
+  /// Announces the end of the turn's speech once nothing is playing, no further
+  /// utterance is about to be queued, and the turn itself has finished.
+  ///
+  /// The turn condition is what makes the acknowledgement safe. It is spoken
+  /// *during* the turn, so it empties the speech queue seconds before the
+  /// answer exists — and on its own that looks exactly like the turn having
+  /// finished speaking, which would send the conversation loop back to the
+  /// microphone while the answer was still being fetched. The passenger would
+  /// be invited to speak, and then talked over.
   void _settleIfQuiet() {
-    if (_pendingUtterances == 0 && !_burstFlushScheduled) {
+    if (!mounted) return;
+    if (_pendingUtterances == 0 && !_burstFlushScheduled && !state.isBusy) {
       _emitActivity(SpeechActivity.settled);
     }
+  }
+
+  /// Watches the busy→idle edge, so a turn that ends without speaking still
+  /// announces itself.
+  ///
+  /// [_settleIfQuiet] holds `settled` back for the whole time a turn is in
+  /// flight, which leaves one case with nobody to report it: a turn that
+  /// finishes having said nothing at all — an error, an empty reply, or voice
+  /// output switched off mid-turn. Without this the loop would wait out its
+  /// twenty-second watchdog before asking again.
+  ///
+  /// Hooked here rather than at each `status: ChatStatus.idle` because there
+  /// are eight of those across five entry points, several behind early returns.
+  @override
+  set state(ChatState value) {
+    final wasBusy = state.isBusy;
+    super.state = value;
+    if (wasBusy && !value.isBusy) _settleIfQuiet();
   }
 
   void _emitActivity(SpeechActivity activity) {
@@ -1307,10 +1485,13 @@ class ChatViewModel extends StateNotifier<ChatState> {
     }
   }
 
-  void _appendError(String message) {
+  void _appendError(String message, {String? retrySuggestion}) {
     state = state.copyWith(
       status: ChatStatus.error,
       errorMessage: message,
+      suggestions: retrySuggestion == null || retrySuggestion.trim().isEmpty
+          ? state.suggestions
+          : [retrySuggestion],
       messages: [
         ...state.messages,
         ChatMessage(
@@ -1339,7 +1520,12 @@ final pendingNextScenarioIdProvider = StateProvider<String?>((ref) => null);
 /// whatever state the previous visit left behind.
 final chatViewModelProvider =
     StateNotifierProvider.autoDispose<ChatViewModel, ChatState>((ref) {
+  // Watched, not read: switching accounts on Home rebuilds the view model,
+  // which starts a fresh chat session against the new member number.
+  final account = ref.watch(activeAccountProvider);
   return ChatViewModel(
+    flightService: FlightServices(memberNo: account.memberNo),
+    travelerFirstName: account.firstName,
     sendMessageUseCase: ref.watch(sendMessageUseCaseProvider),
     classifyIntentUseCase: ref.watch(classifyIntentUseCaseProvider),
     getFlightStatusUseCase: ref.watch(getFlightStatusUseCaseProvider),

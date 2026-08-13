@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:ai_travel_assistant/core/utils/app_date.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/airport_info_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/baggage_model.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/models/booking_model.dart';
@@ -49,7 +50,7 @@ class MockBackendServer {
 
   FlightModel flight(String flightNumber) {
     return _flights.putIfAbsent(flightNumber, () {
-      final now = DateTime.now();
+      final now = AppDate.now;
       return FlightModel(
         flightNumber: flightNumber,
         origin: 'DXB',
@@ -78,7 +79,7 @@ class MockBackendServer {
     required String origin,
     required String destination,
   }) {
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    final tomorrow = AppDate.tomorrow;
     DateTime depart(int hour, int minute) =>
         DateTime(tomorrow.year, tomorrow.month, tomorrow.day, hour, minute);
 

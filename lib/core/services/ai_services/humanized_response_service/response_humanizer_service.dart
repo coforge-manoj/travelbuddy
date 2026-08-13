@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../features/ai_travel_assistant/data/models/humanised_response.dart';
+import '../../../utils/app_date.dart';
 import '../ai_json_parser.dart';
 import 'humanized_response_service_promt.dart';
 
@@ -37,6 +38,14 @@ class ResponseHumanizerService {
             {
               "role": "system",
               "content": HumanizerPrompt.systemPrompt,
+            },
+            {
+              // So a reply can say "tomorrow" about the right day, and never
+              // reads a date back as being in the past. The bubble's prose is
+              // also what gets spoken, so it stays in words — the
+              // August-13-2026 form belongs on the cards, not in a sentence.
+              "role": "system",
+              "content": AppDate.promptContext,
             },
             {
               "role": "user",

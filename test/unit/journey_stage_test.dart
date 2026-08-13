@@ -11,13 +11,47 @@ import '../fixtures/chat_capabilities.dart';
 void main() {
   group('JourneyStage table', () {
     test('every table tool is listed in the capabilities fixture', () {
-      final tools = (chatCapabilitiesFixture['tools'] as List).cast<String>();
+      // Published tools, plus the handful of legacy spellings the fixture
+      // explicitly tolerates — so a genuine typo still fails here.
+      final known = <String>{
+        ...(chatCapabilitiesFixture['tools'] as List).cast<String>(),
+        ...(chatCapabilitiesFixture['toleratedAliases'] as List).cast<String>(),
+      };
       for (final stage in JourneyStage.values) {
         for (final tool in stage.tools) {
           expect(
-            tools,
+            known,
             contains(tool),
             reason: '${stage.id} uses `$tool` which is not in the fixture',
+          );
+        }
+      }
+    });
+
+    test('mutating mirrors the backend\'s own `confirms: true` set', () {
+      // The backend is the authority on which steps take a confirmation.
+      // If these drift, a mutating step could be silently re-posted — and a
+      // duplicate "yes" on checkout is a double charge.
+      final confirming =
+          (chatCapabilitiesFixture['confirmingTools'] as List).cast<String>();
+
+      final mutating = <String>{
+        for (final stage in JourneyStage.values)
+          if (stage.mutating) ...stage.tools,
+      };
+
+      expect(mutating, unorderedEquals(confirming));
+    });
+
+    test('every card a stage expects has a mapper behind it', () {
+      // `expects` drives misfire detection: naming a card the client cannot
+      // draw would make a good turn look like a failure.
+      for (final stage in JourneyStage.values) {
+        for (final card in stage.expects) {
+          expect(
+            ChatCardMapper.supportedCardTypes,
+            contains(card),
+            reason: '${stage.id} expects `$card`, which has no mapper',
           );
         }
       }

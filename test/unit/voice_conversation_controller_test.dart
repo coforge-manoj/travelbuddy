@@ -168,21 +168,25 @@ void main() {
   ({VoiceConversationController controller, _StubChat chat}) buildLoop({
     bool ready = true,
     bool needsConfirmation = false,
+    bool voiceOutputEnabled = true,
+    String? unspokenOpening,
   }) {
     activity = StreamController<SpeechActivity>.broadcast();
     voice = _FakeVoicePort(ready: ready);
     final chat = _StubChat();
 
-    when(() => chat.speechActivity).thenAnswer((_) => activity.stream);
-    when(() => chat.state).thenReturn(
-      ChatState(
-        isVoiceOutputEnabled: true,
-        // `needsConfirmation` is derived from this being non-null.
-        pendingConfirmationMessage:
-            needsConfirmation ? 'cancel my booking' : null,
-      ),
+    var chatState = ChatState(
+      isVoiceOutputEnabled: voiceOutputEnabled,
+      // `needsConfirmation` is derived from this being non-null.
+      pendingConfirmationMessage:
+          needsConfirmation ? 'cancel my booking' : null,
     );
+
+    when(() => chat.speechActivity).thenAnswer((_) => activity.stream);
+    when(() => chat.state).thenAnswer((_) => chatState);
     when(() => chat.lastSpokenLine).thenReturn('Your gate is B twelve.');
+    when(() => chat.unspokenOpening).thenReturn(unspokenOpening);
+    when(() => chat.speakLine(any())).thenReturn(null);
     when(
       () => chat.sendMessage(
         any(),
@@ -200,7 +204,15 @@ void main() {
       ),
     ).thenReturn(null);
     when(() => chat.abortSpeechQueue()).thenReturn(null);
-    when(() => chat.toggleVoiceOutput()).thenReturn(null);
+    when(() => chat.toggleVoiceOutput()).thenAnswer((_) {
+      chatState = chatState.copyWith(
+        isVoiceOutputEnabled: !chatState.isVoiceOutputEnabled,
+      );
+    });
+    when(() => chat.setVoiceOutputEnabled(any())).thenAnswer((invocation) {
+      final enabled = invocation.positionalArguments.first as bool;
+      chatState = chatState.copyWith(isVoiceOutputEnabled: enabled);
+    });
 
     final controller = VoiceConversationController(
       voice: voice,
@@ -329,6 +341,44 @@ void main() {
       await settle(const Duration(milliseconds: 30));
 
       expect(voice.startCount, 2);
+    });
+  });
+
+  group('opening greeting', () {
+    test('reads the welcome on a fresh session before opening the mic',
+        () async {
+      const welcome = 'Hello Elena. What can I help you with?';
+      final loop = buildLoop(unspokenOpening: welcome);
+      final c = loop.controller;
+
+      await c.start();
+
+      verify(() => loop.chat.speakLine(welcome)).called(1);
+      expect(c.state.phase, VoicePhase.thinking);
+      expect(c.state.acknowledgement, welcome);
+      expect(voice.startCount, 0);
+
+      activity.add(SpeechActivity.acknowledging);
+      await settle();
+      expect(c.state.phase, VoicePhase.acknowledging);
+
+      activity.add(SpeechActivity.settled);
+      await settle(const Duration(milliseconds: 30));
+
+      expect(c.state.phase, VoicePhase.listening);
+      expect(voice.startCount, 1);
+    });
+
+    test('does not replay the last answer once the conversation has started',
+        () async {
+      final loop = buildLoop();
+      final c = loop.controller;
+
+      await c.start();
+
+      verifyNever(() => loop.chat.speakLine(any()));
+      expect(c.state.phase, VoicePhase.listening);
+      expect(voice.startCount, 1);
     });
   });
 
@@ -773,5 +823,51 @@ void main() {
     final chat = buildChat();
     addTearDown(chat.dispose);
     expect(chat.speechActivity, isA<Stream<SpeechActivity>>());
+  });
+
+  group('chat TTS preference', () {
+    test('borrows voice output when chat TTS is off, and restores on stop',
+        () async {
+      final loop = buildLoop(voiceOutputEnabled: false);
+      final c = loop.controller;
+
+      await c.start();
+
+      verify(() => loop.chat.setVoiceOutputEnabled(true)).called(1);
+      expect(loop.chat.state.isVoiceOutputEnabled, isTrue);
+
+      await c.stop();
+
+      verify(() => loop.chat.setVoiceOutputEnabled(false)).called(1);
+      expect(loop.chat.state.isVoiceOutputEnabled, isFalse);
+      verify(() => loop.chat.abortSpeechQueue()).called(1);
+    });
+
+    test('leaves chat TTS on when the passenger already had it on', () async {
+      final loop = buildLoop();
+      final c = loop.controller;
+
+      await c.start();
+      verifyNever(() => loop.chat.setVoiceOutputEnabled(any()));
+
+      await c.stop();
+
+      verifyNever(() => loop.chat.setVoiceOutputEnabled(any()));
+      expect(loop.chat.state.isVoiceOutputEnabled, isTrue);
+    });
+
+    test('does not leave chat TTS on after an interruption then stop',
+        () async {
+      final loop = buildLoop(voiceOutputEnabled: false);
+      final c = loop.controller;
+
+      await c.start();
+      await c.interrupt();
+      expect(loop.chat.state.isVoiceOutputEnabled, isTrue);
+
+      await c.stop();
+
+      expect(loop.chat.state.isVoiceOutputEnabled, isFalse);
+    });
   });
 }

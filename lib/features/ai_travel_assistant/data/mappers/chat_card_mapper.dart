@@ -3,8 +3,10 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/bo
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/booking_confirmed_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/cancellation_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/card_json.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/document_check_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/flight_list_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/flight_selected_card_mapper.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/member_wallet_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/seat_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/travel_history_card_mapper.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/data/mappers/upgrade_quote_card_mapper.dart';
@@ -86,6 +88,40 @@ class ChatCardMapper {
     return CardJson.asStringList(data['suggestions']);
   }
 
+  /// Whether this turn is waiting on the passenger to approve a mutating
+  /// action — paying, upgrading or cancelling.
+  ///
+  /// The Postman contract is that those three never happen on the first ask:
+  /// they come back `needsConfirmation: true` with a preview card, and the
+  /// Confirm bar (or a spoken "yes") re-sends the approval. Checkout and
+  /// cancel honour the envelope flag. The live `quote_upgrade` turn often
+  /// omits it even though the card's own note is "Confirm to apply", so an
+  /// `upgrade_quote` is treated as awaiting approval either way — otherwise
+  /// the bar never appears and voice mode offers "check me in" instead of
+  /// "say yes to upgrade".
+  static bool requiresConfirmation(Map<String, dynamic> data) {
+    if (data['needsConfirmation'] == true) return true;
+    return _hasUpgradeQuote(data);
+  }
+
+  /// Stage id to name the spoken yes/no. Falls back to `quote_upgrade`
+  /// when the envelope omitted `tool` but still sent an upgrade quote.
+  static String? confirmationStageId(Map<String, dynamic> data) {
+    final stage = stageOf(data);
+    if (stage != null) return stage.id;
+    if (_hasUpgradeQuote(data)) return JourneyStage.quoteUpgrade.id;
+    return null;
+  }
+
+  static bool _hasUpgradeQuote(Map<String, dynamic> data) {
+    for (final card in CardJson.asMapList(data['cards'])) {
+      if (CardJson.typeOf(card) == UpgradeQuoteCardMapper.upgradeQuoteCardType) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// True when the backend is still collecting details for a stage — today
   /// that is still origin/destination/date for search, but any
   /// [JourneyStage.collects] tool uses the same path.
@@ -148,6 +184,8 @@ class ChatCardMapper {
     UpgradeQuoteCardMapper.upgradeQuoteCardType,
     CancellationCardMapper.cancellationCardType,
     TravelHistoryCardMapper.travelHistoryCardType,
+    MemberWalletMapper.walletCardType,
+    DocumentCheckCardMapper.documentCheckCardType,
   };
 
   static ChatCard? _fromCard(
@@ -222,6 +260,18 @@ class ChatCardMapper {
         return _card(
           ChatMessageType.travelHistoryCard,
           TravelHistoryCardMapper.fromCard(card),
+        );
+
+      case DocumentCheckCardMapper.documentCheckCardType:
+        return _card(
+          ChatMessageType.documentCheckCard,
+          DocumentCheckCardMapper.fromCard(card),
+        );
+
+      case MemberWalletMapper.walletCardType:
+        return _card(
+          ChatMessageType.memberWalletCard,
+          MemberWalletMapper.fromCard(card),
         );
 
       case CancellationCardMapper.cancellationCardType:

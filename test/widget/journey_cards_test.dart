@@ -346,10 +346,10 @@ void main() {
     expect(find.text('Your travel history'), findsOneWidget);
     // The count is the whole record, not the two rows shown.
     expect(find.text('105 flights · all time'), findsOneWidget);
-    expect(find.text('Last flown 21 Jul 2026'), findsOneWidget);
+    expect(find.text('Last flown July-21-2026'), findsOneWidget);
     expect(find.text('Recent trips'), findsOneWidget);
     expect(find.text('AA993 · DFW → LHR'), findsOneWidget);
-    expect(find.text('21 Jul 2026'), findsOneWidget);
+    expect(find.text('July-21-2026'), findsOneWidget);
     expect(find.text('Flagship Business · Seat 3D'), findsOneWidget);
 
     // Miles earned takes the place of the fare, which is kept on the

@@ -29,6 +29,8 @@ enum ChatMessageType {
   upgradeQuoteCard,
   cancellationCard,
   travelHistoryCard,
+  memberWalletCard,
+  documentCheckCard,
 
   error,
 }

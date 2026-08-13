@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'package:meta/meta.dart';
 
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/small_talk.dart';
+
 /// Composes the line the assistant says *while* a turn is being answered.
 ///
 /// A request used to be met with silence: the microphone closed, the orb
@@ -98,6 +100,64 @@ class AcknowledgementComposer {
     "Alright, I won't do that.",
     "Sure, I've left that alone.",
   ];
+
+  /// Said after a question the passenger has to approve, naming the two answers
+  /// that will be understood.
+  ///
+  /// On screen the choice is a pair of buttons — "Confirm" and "Not now" — so
+  /// the question and its options arrive together. Spoken, only the question
+  /// came out, and the passenger was left to guess whether to say "yes",
+  /// "confirm", "do it", or to reach for a screen they may not be looking at.
+  /// That guess is where the conversation stalls: a pending approval blocks
+  /// everything behind it, and the follow-up suggestions are deliberately
+  /// suppressed while one is waiting, so nothing else offers a way forward
+  /// either.
+  ///
+  /// Phrased as "yes or no" rather than as the button labels. Both spoken
+  /// answers are what `isAffirmation`/`isDecline` actually match, and telling a
+  /// passenger to say "confirm" would name the one word that is a button
+  /// caption rather than a thing people say out loud.
+  ///
+  /// The fallback, for a confirmation whose stage is unknown. Named actions are
+  /// in [_confirmActions].
+  static const _confirmOptions = <String>[
+    'Say yes to go ahead, or no to leave it.',
+    'Just say yes if you want me to, or no if not.',
+    'You can say yes to confirm, or no to leave it as it is.',
+  ];
+
+  /// Openers for a named confirmation. All three have to read correctly in
+  /// front of "yes to book it, or no to keep the booking".
+  static const _confirmOpeners = <String>[
+    'Say',
+    'Just say',
+    'You can say',
+  ];
+
+  /// What each approval actually does, keyed by [JourneyStage.id].
+  ///
+  /// "Go ahead" is fine on screen, where the basket, the upgrade quote or the
+  /// cancellation notice is sitting directly above the buttons. Spoken, the
+  /// question can arrive a good few seconds after the thing it refers to, and
+  /// "shall I go ahead?" then asks the passenger to approve something they have
+  /// to remember rather than something they can see. Naming the action makes
+  /// the answer safe to give — and these are the three stages the backend flags
+  /// `confirms: true`, which is to say the three where a wrong "yes" moves
+  /// money or loses a seat.
+  ///
+  /// The refusal is worded as what the passenger keeps, never as a bare "no":
+  /// for a cancellation, "no" and "don't cancel" sound alike under a "yes/no"
+  /// prompt, and the one that has to be unambiguous is the one that saves the
+  /// booking.
+  static const _confirmActions = <String, ({String yes, String no})>{
+    'checkout': (yes: 'book it', no: 'leave it unbooked'),
+    // The quote is the preview; `confirm_upgrade` is the mutating apply.
+    // Either stage id has to name the same yes/no, because the live first
+    // ask is `quote_upgrade` and that is the turn that parks the approval.
+    'quote_upgrade': (yes: 'upgrade', no: 'stay in your current cabin'),
+    'confirm_upgrade': (yes: 'upgrade', no: 'stay in your current cabin'),
+    'cancel_booking': (yes: 'cancel it', no: 'keep the booking'),
+  };
 
   /// Said when a passenger answers a pending question with something else
   /// entirely, which drops the approval that was waiting.
@@ -263,6 +323,17 @@ class AcknowledgementComposer {
     if (cleaned.isEmpty) return '';
     if (confirming) return _pick(_confirmations);
 
+    // Small talk is not a request, so there is nothing to hold for. Every hold
+    // in the pools promises a lookup — "hello" was being answered with "Of
+    // course. Let me pull that up", which pulls up nothing and is heard as the
+    // assistant mishearing a greeting as an errand.
+    //
+    // Silence rather than a shortened line: `ChatViewModel` answers a greeting
+    // from local copy with no network call in the path, so there is no wait to
+    // fill. An opener here would only be something for the real greeting to
+    // talk over a moment later.
+    if (classifySmallTalk(transcript) != null) return '';
+
     final opener = _pick(_openers);
     final reflection = _reflect(cleaned);
     final hold = _holdFor(cleaned);
@@ -290,6 +361,32 @@ class AcknowledgementComposer {
     return rest.isEmpty ? note : '$note $rest';
   }
 
+  /// How to answer a pending approval, spoken because the confirmation bar
+  /// cannot be seen from audio mode.
+  ///
+  /// [stageId] is the [JourneyStage.id] of the step awaiting approval, which
+  /// decides whether the options can be named ("yes to book it, or no to leave
+  /// it unbooked") or have to stay generic. An unknown or absent stage is
+  /// expected, not exceptional: any turn may come back `needsConfirmation`, and
+  /// only three stages are known to.
+  ///
+  /// An instance method, unlike [composeSuggestionLine]: the suggestion line
+  /// varies because its content does, while this one says nearly the same thing
+  /// every time a confirmation comes up — and confirmations come up several
+  /// times in a booking. The no-repeat pools are what keep that from sounding
+  /// like a recorded prompt.
+  String composeConfirmationOptions({String? stageId}) {
+    final action = _confirmActions[stageId];
+    if (action == null) return _pick(_confirmOptions);
+    return '${_pick(_confirmOpeners)} yes to ${action.yes}, '
+        'or no to ${action.no}.';
+  }
+
+  /// The pool, for a test that needs to assert this line was produced without
+  /// depending on which variant [_pick] chose.
+  @visibleForTesting
+  static const confirmationOptionLines = _confirmOptions;
+
   /// The backend's follow-ups, worded as something to say rather than
   /// something to tap.
   ///
@@ -300,7 +397,31 @@ class AcknowledgementComposer {
   ///
   /// Capped at two. The backend routinely sends four, and reading a menu back
   /// after every answer turns a conversation into an IVR tree.
-  static String composeSuggestionLine(List<String> suggestions) {
+  ///
+  /// The carrier frames the chips as **words to say**, which is the only frame
+  /// they are grammatical in.
+  ///
+  /// A chip label is written in the passenger's voice — "Show me cheaper
+  /// options" is what they would ask for. Read out after "You could…" it
+  /// inverts: from the assistant's mouth, "you could show me cheaper options"
+  /// asks the *passenger* to do the showing. "You can say show me cheaper
+  /// options" is correct, because those really are the words to say.
+  ///
+  /// It also does double duty hands-free: the passenger is told the exact
+  /// phrase that works, rather than being left to guess at wording the backend
+  /// will route.
+  ///
+  /// Every carrier here has to read correctly in front of an imperative — "You
+  /// can tell me show me cheaper options" is what happens when one doesn't.
+  static const _suggestionCarriers = <String>[
+    'You can say',
+    'Just say',
+    'Say',
+  ];
+
+  /// An instance method so the carrier can rotate — the same two words after
+  /// every single answer is the thing that makes an assistant sound recorded.
+  String composeSuggestionLine(List<String> suggestions) {
     final offered = suggestions
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
@@ -308,10 +429,13 @@ class AcknowledgementComposer {
         .map(_lowerFirst)
         .toList();
 
+    // The same "say it" frame either way, so a turn offering one follow-up and
+    // a turn offering two sound like the same assistant.
     return switch (offered.length) {
       0 => '',
-      1 => 'You could ${offered.first}.',
-      _ => 'You could ${offered.first}, or ${offered.last}.',
+      1 => '${_pick(_suggestionCarriers)} ${offered.first}.',
+      _ => '${_pick(_suggestionCarriers)} ${offered.first}, '
+          'or ${offered.last}.',
     };
   }
 

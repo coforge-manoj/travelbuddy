@@ -105,6 +105,22 @@ void main() {
           contains('putting that through')));
       expect(line, isNot(contains('you want me to')));
     });
+
+    test('an upgrade quote names the yes and the no', () {
+      final line = composer().composeConfirmationOptions(
+        stageId: 'quote_upgrade',
+      );
+
+      expect(line.toLowerCase(), contains('yes to upgrade'));
+      expect(line.toLowerCase(), contains('stay in your current cabin'));
+    });
+
+    test('checkout names booking, not a generic go ahead', () {
+      final line = composer().composeConfirmationOptions(stageId: 'checkout');
+
+      expect(line.toLowerCase(), contains('yes to book it'));
+      expect(line.toLowerCase(), contains('leave it unbooked'));
+    });
   });
 
   group('not sounding like a script', () {
@@ -143,23 +159,30 @@ void main() {
   });
 
   group('spoken suggestions', () {
-    test('offers the follow-ups as something to say', () {
-      expect(
-        AcknowledgementComposer.composeSuggestionLine(['Check me in']),
-        'You could check me in.',
+    test('frames the follow-ups as words to say', () {
+      // A chip is written in the passenger's voice, so "You could show me
+      // cheaper options" asks the passenger to do the showing. Only the "say
+      // it" frame keeps a passenger-voiced label grammatical in the
+      // assistant's mouth.
+      final line = composer().composeSuggestionLine(
+        ['Check me in', 'Show me cheaper options'],
       );
-      expect(
-        AcknowledgementComposer.composeSuggestionLine(
-          ['Check me in', 'Upgrade to Business'],
-        ),
-        'You could check me in, or upgrade to Business.',
-      );
+
+      expect(line, contains('check me in, or show me cheaper options.'));
+      expect(line, contains('say'));
+    });
+
+    test('a lone follow-up gets the same frame', () {
+      final line = composer().composeSuggestionLine(['Check me in']);
+
+      expect(line, endsWith('check me in.'));
+      expect(line, contains('say'));
     });
 
     test('reads at most two, however many the backend sends', () {
       // The backend routinely sends four. Reading a menu back after every
       // answer turns a conversation into a phone tree.
-      final line = AcknowledgementComposer.composeSuggestionLine([
+      final line = composer().composeSuggestionLine([
         'Book the recommended one',
         'Show me cheaper options',
         'Check me in',
@@ -172,14 +195,14 @@ void main() {
 
     test('leaves an acronym alone', () {
       expect(
-        AcknowledgementComposer.composeSuggestionLine(['PNR lookup']),
-        'You could PNR lookup.',
+        composer().composeSuggestionLine(['PNR lookup']),
+        endsWith('PNR lookup.'),
       );
     });
 
     test('says nothing when there is nothing to offer', () {
-      expect(AcknowledgementComposer.composeSuggestionLine([]), '');
-      expect(AcknowledgementComposer.composeSuggestionLine(['', '  ']), '');
+      expect(composer().composeSuggestionLine([]), '');
+      expect(composer().composeSuggestionLine(['', '  ']), '');
     });
   });
 

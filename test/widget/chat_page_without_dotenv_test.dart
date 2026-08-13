@@ -52,6 +52,6 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(ChatPage), findsOneWidget);
-    expect(find.textContaining('Hello'), findsOneWidget);
+    expect(find.textContaining('Elena'), findsOneWidget);
   });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -19,7 +20,11 @@ import 'package:ai_travel_assistant/features/landing/presentation/pages/landing_
 /// `AiTravelAssistantEntryPoint.route()` from wherever makes sense for them.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-   await dotenv.load(fileName: '.env', isOptional: true);
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  await dotenv.load(fileName: '.env', isOptional: true);
   await Hive.initFlutter();
   final chatHistoryBox = await Hive.openBox<Map<dynamic, dynamic>>(
     HiveChatLocalDataSource.boxName,
@@ -50,9 +55,17 @@ class _AiTravelAssistantDemoAppState extends ConsumerState<AiTravelAssistantDemo
     super.initState();
     // Tapping the post-use-case reminder notification has no BuildContext of
     // its own, so it routes through the shared `rootNavigatorKey` instead.
-    ref.read(localNotificationServiceProvider).onScenarioTapped = (scenarioId) {
+    ref.read(localNotificationServiceProvider).onScenarioTapped = (payload) {
+      // A `live:` payload carries the backend's own push copy, which opens
+      // the conversation as-is. Anything else names a scripted scenario from
+      // the concierge catalogue — the original behaviour, untouched.
+      const prefix = LocalNotificationService.liveMomentPayloadPrefix;
+      final isLive = payload.startsWith(prefix);
       rootNavigatorKey.currentState?.push(
-        AiTravelAssistantEntryPoint.route(autoStartScenarioId: scenarioId),
+        AiTravelAssistantEntryPoint.route(
+          autoStartScenarioId: isLive ? null : payload,
+          openingLine: isLive ? payload.substring(prefix.length) : null,
+        ),
       );
     };
   }

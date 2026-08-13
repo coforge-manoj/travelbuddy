@@ -11,10 +11,21 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/sp
 /// line we speak, falling back to [FallbackSpeechSummarizer] whenever the
 /// model is slow, unreachable, or returns something we can't trust.
 ///
-/// The call is bounded by [timeout]. That budget used to be 1800ms, which was
-/// below this router's own measured latency (1.9–3.3s for a card narration),
-/// so every call expired and every line fell back — paying the full wait for
-/// wording that was always discarded. It sits above the measured range now.
+/// The call is bounded by [timeout]. That budget has now been wrong in both
+/// directions. At 1800ms it sat below this router's measured latency
+/// (1.9–3.3s), so every call expired and every line fell back — paying the
+/// full wait for wording that was always discarded. Raised to 3500ms it sat
+/// just *at* the latency, which is the same failure with better odds: two
+/// consecutive on-device turns timed out at ~3.5s and used the offline
+/// summary anyway.
+///
+/// 6000ms clears the measured range rather than grazing it. The reason to
+/// prefer a longer budget over a shorter one is that the wait is no longer the
+/// passenger's: `ChatViewModel._renderAhead` starts this call the moment the
+/// reply arrives, while the acknowledgement is still being spoken, so a call
+/// that finishes inside the acknowledgement costs nothing at all. A budget
+/// that expires early converts that free time into a worse-worded line for no
+/// saving.
 ///
 /// This is affordable because the chat bubble is no longer held back for
 /// audio: the reply is on screen immediately and only the speech waits. A
@@ -24,7 +35,7 @@ class SpeechSummaryService implements SpeechSummarizer {
   SpeechSummaryService({
     http.Client? client,
     this.fallback = const FallbackSpeechSummarizer(),
-    this.timeout = const Duration(milliseconds: 3500),
+    this.timeout = const Duration(milliseconds: 6000),
   }) : _client = client ?? http.Client();
 
   final http.Client _client;
@@ -79,10 +90,21 @@ class SpeechSummaryService implements SpeechSummarizer {
               // Slightly warmer than a strict rewrite so fillers and phrasing
               // vary across turns instead of repeating the same opener.
               'temperature': 0.55,
-              // Headroom over what the prompt asks for: at 200 a three-sentence
-              // rewrite could be cut off by the token limit itself, and a
-              // completion that stops mid-word is spoken exactly that way.
-              'max_tokens': 320,
+              // Sized for a *thinking* model, not for the answer.
+              //
+              // 320 was headroom over the two or three sentences the prompt
+              // asks for — ample, if every token were spoken. But
+              // `gemini-2.5-flash` reasons before it answers, and on an
+              // OpenAI-compatible gateway those reasoning tokens come out of
+              // this same budget. The visible answer gets whatever is left: a
+              // reply measured on-device came back at 51 characters, roughly a
+              // dozen tokens, cut mid-clause.
+              //
+              // 1024 leaves room for the reasoning pass and a complete answer.
+              // It costs nothing when unused — completions are billed on what
+              // is generated, not on the ceiling — and the prompt, not this
+              // number, is what keeps the reply short.
+              'max_tokens': 1024,
               'messages': [
                 {
                   'role': 'system',
@@ -101,6 +123,12 @@ class SpeechSummaryService implements SpeechSummarizer {
       if (response.statusCode != 200) return fallback.condense(text);
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+
+      // Token accounting, traced because it is the only way to tell a model
+      // that answered briefly from one that ran out of budget mid-sentence.
+      // A `reasoning_tokens` figure far larger than `completion_tokens` is the
+      // thinking model eating the ceiling — see the note on `max_tokens`.
+      _traceUsage(decoded['usage']);
       final choices = decoded['choices'] as List?;
       if (choices == null || choices.isEmpty) return fallback.condense(text);
 
@@ -124,6 +152,31 @@ class SpeechSummaryService implements SpeechSummarizer {
       // produced a number that isn't in the source, we don't say it.
       if (_inventsNumbers(candidate, source)) return fallback.condense(text);
 
+      // Completeness guard: a rewrite that stops mid-sentence is spoken exactly
+      // that way, and a sentence that just stops sounds like the assistant was
+      // cut off rather than like it finished.
+      //
+      // Observed on a device: "I can search flights, book, add extras, pick
+      // seats, check you in, upgrade or cancel. What would you like to do?"
+      // came back as "Alright, Elena, I can help you search flights, book" —
+      // 51 characters, ending on a comma clause. Well under `max_tokens: 320`,
+      // so the cap that produced it is the router's, not ours, and cannot be
+      // raised from here.
+      //
+      // `finish_reason` is checked first because it is the router *saying* it
+      // truncated; the punctuation test catches the routers that don't report
+      // it. The offline summary is complete by construction, which is the one
+      // property that matters here.
+      final finishReason = first['finish_reason']?.toString();
+      if (finishReason == 'length' || _looksTruncated(candidate)) {
+        SpeechTrace.step(
+          'summarize.truncated',
+          detail: 'reason=${finishReason ?? 'no terminator'} '
+              'out=${candidate.length} — using offline summary',
+        );
+        return fallback.condense(text);
+      }
+
       // A backstop for a model that ignores the length rule, not a second
       // opinion on wording: well above anything the prompt asks for, and it
       // ends on a sentence rather than mid-clause.
@@ -144,6 +197,40 @@ class SpeechSummaryService implements SpeechSummarizer {
       );
       return fallback.condense(text);
     }
+  }
+
+  /// Reports whatever token counts the router returned.
+  ///
+  /// Shapes vary between gateways, so nothing here is required: an absent
+  /// `usage` block, or one with different key names, simply traces less rather
+  /// than throwing on a path whose whole job is to degrade gracefully.
+  void _traceUsage(Object? usage) {
+    if (usage is! Map) return;
+    final completion = usage['completion_tokens'];
+    final details = usage['completion_tokens_details'];
+    final reasoning =
+        details is Map ? details['reasoning_tokens'] : usage['reasoning_tokens'];
+
+    SpeechTrace.step(
+      'summarize.llm.usage',
+      detail: 'completion=$completion reasoning=${reasoning ?? 'n/a'} '
+          'total=${usage['total_tokens']}',
+    );
+  }
+
+  /// Whether [candidate] reads as a completion that was cut off.
+  ///
+  /// A finished rewrite ends on a sentence — the prompt asks for one or two of
+  /// them and every example ends in `.` or `?`. Anything ending mid-clause is
+  /// either a truncation or a model ignoring the format badly enough that the
+  /// deterministic summary is the better line to speak.
+  ///
+  /// A closing quote or bracket counts as terminal: "…what would you like to
+  /// do?)" is complete, just punctuated oddly.
+  bool _looksTruncated(String candidate) {
+    final trimmed = candidate.replaceAll(RegExp(r'''["'”’)\]]+$'''), '').trim();
+    if (trimmed.isEmpty) return true;
+    return !RegExp(r'[.!?…]$').hasMatch(trimmed);
   }
 
   /// Models occasionally wrap the answer in quotes or a stray code fence.

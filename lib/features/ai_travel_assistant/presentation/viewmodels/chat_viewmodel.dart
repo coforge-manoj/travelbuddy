@@ -32,9 +32,11 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/card_speech_text_builder.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_chunker.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_log.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_synthesizer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_trace.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/acknowledgement_composer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/small_talk.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/data/scenario_catalog.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/domain/entities/proactive_scenario.dart';
@@ -43,6 +45,7 @@ import '../../../../core/services/ai_services/conversation_route/conversation_ro
 import '../../../../core/services/ai_services/humanized_response_service/response_humanizer_service.dart';
 import '../../../../core/services/ai_services/trip_discovery/trip_discovery_service.dart';
 import '../../data/models/conersation_route/trip_discovery_context.dart';
+import '../services/concierge_moments_service.dart';
 import '../services/flight_services.dart';
 
 const _uuid = Uuid();
@@ -83,11 +86,12 @@ class ChatViewModel extends StateNotifier<ChatState> {
     required bool Function() getVoiceOutputEnabled,
     required void Function(String? scenarioId) setPendingNextScenarioId,
     FlightServices? flightService,
+    ConciergeMomentsService? conciergeMoments,
     String? travelerFirstName,
     CardSpeechTextBuilder cardSpeechTextBuilder = const CardSpeechTextBuilder(),
   })  : _flightService = flightService ?? FlightServices(),
-        _travelerFirstName =
-            travelerFirstName ?? demoAccounts.first.firstName,
+        _conciergeMoments = conciergeMoments,
+        _travelerFirstName = travelerFirstName ?? demoAccounts.first.firstName,
         _cardSpeechTextBuilder = cardSpeechTextBuilder,
         _sendMessageUseCase = sendMessageUseCase,
         _classifyIntentUseCase = classifyIntentUseCase,
@@ -133,6 +137,17 @@ class ChatViewModel extends StateNotifier<ChatState> {
   final void Function(String? scenarioId) _setPendingNextScenarioId;
   final CardSpeechTextBuilder _cardSpeechTextBuilder;
 
+  /// Wording for the lines this class speaks but never shows — currently how to
+  /// answer a pending approval. Held as an instance because its pools remember
+  /// their last pick, which is what stops a booking's several confirmations
+  /// from being read out in identical words.
+  final AcknowledgementComposer _acknowledgements = AcknowledgementComposer();
+
+  /// Wording for greetings and sign-offs. An instance for the same reason as
+  /// [_acknowledgements]: its pools remember their last pick, and the greeting
+  /// is the first line anyone hears in a demo.
+  final SmallTalkComposer _smallTalk = SmallTalkComposer();
+
   /// The signed-in demo passenger's first name, used by the greeting. Comes
   /// from the account switcher on Home (see `activeAccountProvider`).
   final String _travelerFirstName;
@@ -147,6 +162,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// otherwise unreachable, since the real client posts to a hardcoded
   /// tunnel — can skip it.
   final FlightServices _flightService;
+
+  /// The proactive-moment endpoints. Nullable, and left null by tests that
+  /// do not care: every call site treats "no service" the same as "nothing
+  /// due", so the booking journey is identical either way.
+  final ConciergeMomentsService? _conciergeMoments;
 
   /// Every fresh entry into the chat screen (including navigating back and
   /// re-opening it — see the `autoDispose` on [chatViewModelProvider], which
@@ -166,7 +186,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
       role: ChatRole.assistant,
       type: ChatMessageType.text,
       timestamp: DateTime.now(),
-      text: 'Hello $_travelerFirstName! How can I help you today?',
+      text: _smallTalk.compose(
+        SmallTalk.greeting,
+        travelerFirstName: _travelerFirstName,
+        offers: const [],
+      ),
     );
     state = state.copyWith(
       status: ChatStatus.idle,
@@ -312,12 +336,36 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: trimmed,
       ),
     );
-    // After `stopSpeaking`, so the previous answer is cut off before this is
-    // queued rather than being cut off by it.
+    // After `stopSpeaking`, so the previous answer *and* its follow-up line
+    // are dropped before this acknowledgement is queued.
     if (acknowledgement != null) _speakAside(acknowledgement);
     // Read before the reset below: this message is the answer to whatever
     // the backend last asked for (search details, which extra, which seat…).
     final continuesStage = state.awaitingDetailsFor;
+
+    // Small talk is answered here, before any network call, and only when
+    // nothing is under way — mid-journey, "that's all" and "no thanks" are
+    // answers to the backend's question, not sign-offs, and belong on the
+    // journey path.
+    //
+    // Answered from local copy rather than after classification because the
+    // classifier is an LLM round trip: "hello" measured 3.6s to come back
+    // `unknown`, which is 3.6 seconds of the passenger waiting to be greeted.
+    // It is also why the acknowledgement stays silent for small talk — with
+    // nothing to wait for, a "let me pull that up" would be talking over the
+    // greeting a moment later.
+    // A pending approval is deliberately excluded: "no thanks" with a payment
+    // waiting is a refusal, and it has to reach the path that drops the
+    // approval and says so — answering "Anytime." would leave the passenger
+    // believing they had declined something that is still sitting there.
+    if (state.activeIntent == null &&
+        continuesStage == null &&
+        !state.needsConfirmation &&
+        classifySmallTalk(trimmed) != null) {
+      _appendSmallTalkOrCapabilities(trimmed);
+      state = state.copyWith(status: ChatStatus.idle);
+      return;
+    }
 
     state = state.copyWith(
       status: ChatStatus.sendingMessage,
@@ -361,7 +409,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       final lastAssistantMessage = state.messages
           .lastWhere(
             (e) => e.role == ChatRole.assistant,
-      )
+          )
           .text;
 
       print("===== ROUTER INPUT =====");
@@ -372,8 +420,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
         "latestUserMessage": trimmed,
       });
 
-      final routerResult =
-      await ConversationRouterService.instance.route(
+      final routerResult = await ConversationRouterService.instance.route(
         activeIntent: state.activeIntent!,
         assistantMessage: lastAssistantMessage,
         userMessage: trimmed,
@@ -385,14 +432,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
 
       print("===== ROUTER DECISION =====");
       print({
-        "continueConversation":
-        routerResult.continueConversation,
-        "requiresReclassification":
-        routerResult.requiresReclassification,
-        "normalizedPrompt":
-        routerResult.normalizedPrompt,
-        "updatedContext":
-        routerResult.updatedContext,
+        "continueConversation": routerResult.continueConversation,
+        "requiresReclassification": routerResult.requiresReclassification,
+        "normalizedPrompt": routerResult.normalizedPrompt,
+        "updatedContext": routerResult.updatedContext,
       });
 
       // ==========================================================
@@ -402,8 +445,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
 
       if (routerResult.continueConversation) {
         state = state.copyWith(
-          conversationContext:
-          state.conversationContext.copyWith(
+          conversationContext: state.conversationContext.copyWith(
             data: routerResult.updatedContext,
           ),
         );
@@ -428,7 +470,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
       if (routerResult.requiresReclassification) {
         print(
           "🔄 Topic changed. Clearing active intent: "
-              "${state.activeIntent!.name}",
+          "${state.activeIntent!.name}",
         );
 
         state = state.copyWith(
@@ -463,14 +505,13 @@ class ChatViewModel extends StateNotifier<ChatState> {
     // and can classify it as tripDiscovery.
     // ============================================================
 
-    final intentResult =
-    await _classifyIntentUseCase(trimmed);
+    final intentResult = await _classifyIntentUseCase(trimmed);
 
     await intentResult.fold(
-          (failure) async {
+      (failure) async {
         _appendError(failure.message);
       },
-          (intent) async {
+      (intent) async {
         await _handleIntent(
           intent,
           trimmed,
@@ -515,8 +556,33 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// passenger tapped the reminder notification, or just opened the AI
   /// assistant directly while one was pending (see [ChatPage]'s handling of
   /// [pendingNextScenarioIdProvider]) — so it replaces whatever
-  /// [_startNewSession] already seeded (the plain "Hello" welcome) rather
+  /// [_startNewSession] already seeded (the greeting welcome) rather
   /// than appending after it.
+  /// Opens the chat on a proactive moment the *backend* wrote, replacing the
+  /// generic welcome with [openingLine].
+  ///
+  /// Deliberately not [startScenarioById]. That one sets `activeScenario`,
+  /// which puts the chat into scripted mode — every following turn is matched
+  /// against the playbook's lines and a `SuggestedReplyChip` offers the
+  /// passenger's next scripted sentence. Here the notification is only an
+  /// opening: what the passenger says next must go to `/chat` as free text
+  /// like any other message, so no scenario is started.
+  Future<void> startFromProactiveMessage(String openingLine) async {
+    if (state.isBusy || state.hasActiveScenario) return;
+    final trimmed = openingLine.trim();
+    if (trimmed.isEmpty) return;
+
+    final opening = ChatMessage(
+      id: _uuid.v4(),
+      role: ChatRole.assistant,
+      type: ChatMessageType.text,
+      timestamp: DateTime.now(),
+      text: trimmed,
+    );
+    state = state.copyWith(messages: [opening]);
+    unawaited(_saveChatMessageUseCase(opening));
+  }
+
   Future<void> startScenarioById(String scenarioId) async {
     if (state.isBusy || state.hasActiveScenario) return;
     final scenario = scenarioById(scenarioId);
@@ -657,6 +723,22 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 
   Future<void> _handleIntent(IntentResult intent, String utterance) async {
+    // The classifier never answered — it timed out or errored. Post the
+    // message to TravelBuddy `/chat` rather than apologizing for it: that
+    // endpoint does its own routing, and it is where this message was headed
+    // anyway on almost every intent. A router being slow is not a reason to
+    // hand the passenger to a human agent.
+    //
+    // Checked before the confidence test, because a failed call reports
+    // confidence 0.0 and would otherwise read as the passenger being unclear.
+    if (intent.classifierFailed) {
+      await _handleTravelBuddyChat(
+        userMessage: utterance,
+        apiMessage: utterance,
+      );
+      return;
+    }
+
     if (intent.isLowConfidence && intent.type != IntentType.faq) {
       _appendEscalationOffer();
       return;
@@ -679,9 +761,14 @@ class ChatViewModel extends StateNotifier<ChatState> {
       case IntentType.humanAgent:
         await _handleEscalation(utterance);
 
+      // Both land here because neither has a working answer path: the
+      // generic-reply endpoint they used to share is a placeholder host.
+      // Small talk is answered in kind; anything genuinely unplaceable gets
+      // the capability offer, which is the honest reply and is strictly better
+      // than the connection error it replaces.
       case IntentType.faq:
       case IntentType.unknown:
-        await _handleGenericReply(utterance);
+        _appendSmallTalkOrCapabilities(utterance);
       default:
         state = state.copyWith(
           activeIntent: intent.type,
@@ -742,8 +829,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
         'suggestions': result.suggestions,
       };
 
-      final humanized =
-      await ResponseHumanizerService.instance.humanize(
+      final humanized = await ResponseHumanizerService.instance.humanize(
         userMessage: userMessage,
         backendResponse: backendData,
         suggestions: result.suggestions,
@@ -779,7 +865,6 @@ class ChatViewModel extends StateNotifier<ChatState> {
       );
     }
   }
-
 
   Future<void> _handleOthersRequest(IntentResult intent) async {
     final apiMessage = intent.qnPromt.trim().isNotEmpty
@@ -841,7 +926,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
 
       final reply = backendData['reply']?.toString() ?? '';
       final needsConfirmation =
-          backendData['needsConfirmation'] == true;
+          ChatCardMapper.requiresConfirmation(backendData);
 
       // Empty on a turn that produced nothing to act on — see
       // [ChatCardMapper.followUpsFrom].
@@ -874,12 +959,12 @@ class ChatViewModel extends StateNotifier<ChatState> {
       state = state.copyWith(
         suggestions: suggestions,
         pendingConfirmationMessage: needsConfirmation ? apiMessage : null,
-        pendingConfirmationPrompt: needsConfirmation ? displayText : null,
+        pendingConfirmationPrompt:
+            needsConfirmation ? _confirmationPrompt(displayText) : null,
         clearPendingConfirmation: !needsConfirmation,
         // Park collecting stages so the next message is merged rather than
         // posted on its own. Cleared explicitly on every other outcome.
-        awaitingDetailsFor:
-            outcome == TurnOutcome.collecting ? stage : null,
+        awaitingDetailsFor: outcome == TurnOutcome.collecting ? stage : null,
         clearAwaitingDetailsFor: outcome != TurnOutcome.collecting,
       );
 
@@ -927,9 +1012,19 @@ class ChatViewModel extends StateNotifier<ChatState> {
       //
       // Skipped while something awaits approval: the backend has just asked a
       // direct question, and offering alternatives on top of it invites an
-      // answer to the wrong one.
-      if (!needsConfirmation) {
-        _speakAside(AcknowledgementComposer.composeSuggestionLine(suggestions));
+      // answer to the wrong one. The approval gets its own line instead —
+      // audio mode now shows the same Confirm bar as chat, but a passenger
+      // who is not looking still has to hear the yes/no.
+      _speakAside(
+        needsConfirmation
+            ? _acknowledgements.composeConfirmationOptions(
+                stageId: ChatCardMapper.confirmationStageId(backendData),
+              )
+            : _acknowledgements.composeSuggestionLine(suggestions),
+      );
+
+      if (needsConfirmation && stage == JourneyStage.checkout) {
+        await _raiseDocumentIssuesBeforePaying();
       }
     } catch (e) {
       debugPrint('TravelBuddy /chat failed: $e');
@@ -938,6 +1033,62 @@ class ChatViewModel extends StateNotifier<ChatState> {
         retrySuggestion: apiMessage,
       );
     }
+  }
+
+  /// Wording for the confirmation bar (and the spoken "shall I?").
+  ///
+  /// Checkout already asks "Shall I go ahead?" in the backend reply. Upgrade
+  /// quotes often do not — they state the price and stop — so without this
+  /// the bar reads as a statement and voice mode never asks for a yes.
+  static String _confirmationPrompt(String reply) {
+    final trimmed = reply.trim();
+    if (trimmed.isEmpty) return 'Shall I go ahead?';
+    final ended = RegExp(r'[.!?]$').hasMatch(trimmed) ? trimmed : '$trimmed.';
+    if (ended.endsWith('?')) return ended;
+    return '$ended Shall I go ahead?';
+  }
+
+  /// Whether the document warning has already been raised this session, so a
+  /// second trip through checkout does not repeat it.
+  bool _documentInterruptRaised = false;
+
+  /// Speaks up about passport problems *before* the passenger pays.
+  ///
+  /// This is the one proactive moment in the booking journey. It is a message
+  /// in the conversation rather than a notification on purpose: the passenger
+  /// is looking at the confirm bar with the app in front of them, and a push
+  /// banner for something happening on screen would be theatre.
+  ///
+  /// Every failure path is silent. The copy is the backend's
+  /// (`/trips/{id}/pending`), so if the trip has no document issue due — a
+  /// member with no seeded trip, an unreachable tunnel — there is simply
+  /// nothing to say, and the checkout the passenger asked for proceeds
+  /// untouched.
+  ///
+  /// Deliberately **not** marked delivered on the backend. Doing so would
+  /// drop it out of `/pending` permanently, so the moment would fire once per
+  /// backend restart and a second rehearsal would silently lose it. The
+  /// in-session [_documentInterruptRaised] flag is the right scope for "don't
+  /// say this twice" — it stops the nag repeating in one conversation while
+  /// leaving the demo re-runnable.
+  Future<void> _raiseDocumentIssuesBeforePaying() async {
+    if (_documentInterruptRaised) return;
+
+    final copy = await _conciergeMoments?.pendingPushCopyFor(
+      ConciergeMomentsService.documentReadinessUseCase,
+    );
+    if (copy == null || copy.isEmpty) return;
+
+    _documentInterruptRaised = true;
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: copy,
+      ),
+    );
   }
 
   /// The affirmation the Confirm button sends.
@@ -1034,10 +1185,93 @@ class ChatViewModel extends StateNotifier<ChatState> {
     );
   }
 
-  Future<void> _handleGenericReply(String utterance) async {
-    final result = await _sendMessageUseCase(
-        userUtterance: utterance, history: state.messages);
-    result.fold((failure) => _appendError(failure.message), _appendMessage);
+  /// What the assistant can actually do, in journey order.
+  ///
+  /// Two wordings per capability, because the same fact is said from two
+  /// mouths: [chip] is what the *passenger* would ask for, and is posted
+  /// verbatim when tapped — so it has to be a phrase the backend routes, and
+  /// matches the corrective chips on [JourneyStage]. [offer] is the
+  /// *assistant* describing itself, which cannot reuse the chip: "I can check
+  /// me in" is what happens when it does.
+  static const _capabilities = <({String chip, String offer})>[
+    (chip: 'Book a flight', offer: 'book you a flight'),
+    (chip: 'Check me in', offer: 'check you in'),
+    (chip: 'Show the seat map', offer: 'sort out your seat'),
+    (chip: 'Quote an upgrade', offer: 'price up an upgrade'),
+    (chip: 'Show my trip details', offer: 'pull up your trip details'),
+  ];
+
+  /// The reply to something the assistant could not place.
+  ///
+  /// This used to go to `_sendMessageUseCase`, which posts to
+  /// `dioProvider`'s placeholder host (`api.example-airline.com`) — a domain
+  /// that does not resolve. Every unplaceable utterance therefore ended in a
+  /// connection error rendered as "No internet connection.", blaming the
+  /// passenger's phone for an endpoint that was never stood up. Answering from
+  /// the capability list needs no network at all, and tells the passenger the
+  /// one thing that actually moves the conversation forward.
+  ///
+  /// The chips are set as well as spoken: on screen they are tappable, and in
+  /// audio mode the first two are read out by the line itself.
+  /// Answers a greeting as a greeting, and anything else the classifier could
+  /// not place with the capability offer.
+  ///
+  /// "Hello" reaches this method as `IntentType.unknown` — the classifier looks
+  /// for a travel action and a greeting contains none — so without this check
+  /// the first thing a passenger hears is the assistant saying it cannot help
+  /// with hello.
+  ///
+  /// The chips are set for the openers and left alone for the closers: someone
+  /// saying thanks or goodbye is finishing, and putting a fresh menu in front
+  /// of them is the conversational equivalent of not letting them leave.
+  void _appendSmallTalkOrCapabilities(String utterance) {
+    final kind = classifySmallTalk(utterance);
+    if (kind == null) {
+      _appendCapabilityOffer();
+      return;
+    }
+
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: _smallTalk.compose(
+          kind,
+          travelerFirstName: _travelerFirstName,
+          offers: _capabilities.map((c) => c.offer).toList(),
+        ),
+      ),
+    );
+
+    if (kind == SmallTalk.thanks || kind == SmallTalk.farewell) return;
+    state = state.copyWith(
+      suggestions: _capabilities.map((c) => c.chip).toList(),
+    );
+  }
+
+  /// Three of the five, not all of them: read aloud, a five-item list is a menu
+  /// being recited, and the chips carry the rest for anyone looking at the
+  /// screen.
+  void _appendCapabilityOffer() {
+    final offers = _capabilities.take(3).map((c) => c.offer).toList();
+
+    _appendMessage(
+      ChatMessage(
+        id: _uuid.v4(),
+        role: ChatRole.assistant,
+        type: ChatMessageType.text,
+        timestamp: DateTime.now(),
+        text: "I'm not sure I can help with that one. I can ${offers[0]}, "
+            '${offers[1]}, or ${offers[2]} — among other things. '
+            'What would you like to do?',
+      ),
+    );
+
+    state = state.copyWith(
+      suggestions: _capabilities.map((c) => c.chip).toList(),
+    );
   }
 
   /// Starts voice input. On a final transcript, feeds it straight into
@@ -1071,11 +1305,19 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 
   /// Toggles whether assistant text replies are read aloud.
-  void toggleVoiceOutput() {
-    state = state.copyWith(isVoiceOutputEnabled: !state.isVoiceOutputEnabled);
-    if (!state.isVoiceOutputEnabled) {
-      stopSpeaking();
-    }
+  void toggleVoiceOutput() =>
+      setVoiceOutputEnabled(!state.isVoiceOutputEnabled);
+
+  /// Turns chat read-aloud on or off for this session. Does not persist to
+  /// the More-tab default — that is applied once, when the session starts.
+  ///
+  /// Voice mode borrows this flag while it is open (the hands-free loop
+  /// cannot run muted) and restores it on the way out, so a passenger who
+  /// left chat TTS off is not then read to on the transcript.
+  void setVoiceOutputEnabled(bool enabled) {
+    if (state.isVoiceOutputEnabled == enabled) return;
+    state = state.copyWith(isVoiceOutputEnabled: enabled);
+    if (!enabled) stopSpeaking();
   }
 
   @override
@@ -1099,6 +1341,26 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// resolve is nowhere near the end of the answer.
   Stream<SpeechActivity> get speechActivity => _speechActivity.stream;
   final _speechActivity = StreamController<SpeechActivity>.broadcast();
+
+  /// The session-opening line, when it has not been heard yet.
+  ///
+  /// A fresh chat is assistant bubbles and no passenger turn. Voice mode
+  /// reads that bubble on entry so the greeting on screen is also the
+  /// greeting in the ear; once the passenger has spoken, or the line has
+  /// already been read out, this is null and the loop goes straight to the
+  /// microphone.
+  String? get unspokenOpening {
+    final messages = state.messages;
+    if (messages.isEmpty) return null;
+    if (messages.any((m) => m.role == ChatRole.user)) return null;
+    final text = messages.last.text.trim();
+    if (text.isEmpty) return null;
+    if (_lastSpokenLine.trim() == text) return null;
+    return text;
+  }
+
+  /// Speaks [line] without appending it — the words are already on screen.
+  void speakLine(String line) => _speakAside(line);
 
   /// Speech sources from the replies appended in the current synchronous
   /// burst, flushed as one narration by [_flushBurstSpeech].
@@ -1137,6 +1399,16 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// that asked for it.
   int _speechEpoch = 0;
 
+  /// Position in the speech queue, handed to each utterance as it is queued.
+  int _queueSeq = 0;
+
+  /// The queue position of the newest *answer*.
+  ///
+  /// An acknowledgement compares its own position against this to find out
+  /// whether the thing it was covering has arrived. Answers only — a second
+  /// filler is no reason to cut the first one short.
+  int _answerSeq = 0;
+
   /// Emits [messages] as one burst, the way a turn that posts a reply and
   /// several cards does. Exists so burst coalescing can be tested without
   /// standing up a live backend.
@@ -1146,6 +1418,10 @@ class ChatViewModel extends StateNotifier<ChatState> {
       _appendMessage(message);
     }
   }
+
+  /// Queues an aside the way a turn's follow-up line does, for speech tests.
+  @visibleForTesting
+  void debugSpeakAside(String line) => speakLine(line);
 
   /// Bubbles are never held back waiting on audio: the message is committed
   /// immediately and the speech catches up. Reading a reply that starts being
@@ -1167,13 +1443,27 @@ class ChatViewModel extends StateNotifier<ChatState> {
     if (line == null) return;
 
     final source = _withoutRepetition(line.text.trim());
-    if (source.isEmpty) return;
+    if (source.isEmpty) {
+      SpeechLog.dropped('repeats a line already in this burst', line.text);
+      return;
+    }
+
+    SpeechLog.source(
+      origin: message.type == ChatMessageType.text
+          ? 'reply'
+          : 'card:${message.type.name}',
+      factual: line.isFactual,
+      text: source,
+    );
 
     // A card's narration supersedes the backend's one-line summary of the same
     // turn. Both describe the answer, in different words, so keeping the reply
     // means saying it twice — and the card's version is the better one aloud,
     // built from the payload with codes spelled out.
     if (line.isFactual) {
+      for (final superseded in _burstSpeechSources.where((s) => !s.fromCard)) {
+        SpeechLog.dropped('superseded by card narration', superseded.text);
+      }
       _burstSpeechSources.removeWhere((source) => !source.fromCard);
     }
 
@@ -1215,6 +1505,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
     _burstFlushScheduled = false;
     final joined = _burstSpeechSources.map((s) => s.text).join('\n\n');
     final factual = _burstSpeechSources.any((s) => s.fromCard);
+    final sourceCount = _burstSpeechSources.length;
     _burstSpeechSources.clear();
     if (joined.isEmpty || !mounted || !state.isVoiceOutputEnabled) {
       _settleIfQuiet();
@@ -1225,12 +1516,36 @@ class ChatViewModel extends StateNotifier<ChatState> {
     _pendingUtterances++;
     _emitActivity(SpeechActivity.preparing);
 
+    final id =
+        SpeechLog.queued('burst', joined, detail: 'sources=$sourceCount');
+
     // Timed from here rather than inside `_speakSafely`: waiting for the
     // previous utterance to finish is part of the delay a passenger feels, and
     // it is invisible from inside the link that finally runs.
     final queued = Stopwatch()..start();
+    final epoch = _speechEpoch;
+
+    // Published before the render starts: this is the signal an acknowledgement
+    // still playing is watching for, and it should see it the instant the
+    // answer exists rather than once the answer is also rendered.
+    final seq = ++_queueSeq;
+    _answerSeq = seq;
+
+    final rendering = _renderAhead(
+      joined,
+      summarize: !factual,
+      epoch: epoch,
+      logId: id,
+      aside: false,
+    );
     _speechChain = _speechChain.then(
-      (_) => _speakSafely(joined, summarize: !factual, queuedFor: queued),
+      (_) => _speakSafely(
+        rendering,
+        epoch: epoch,
+        seq: seq,
+        queuedFor: queued,
+        logId: id,
+      ),
     );
   }
 
@@ -1247,6 +1562,23 @@ class ChatViewModel extends StateNotifier<ChatState> {
     final text = line.trim();
     if (text.isEmpty || !mounted || !state.isVoiceOutputEnabled) return;
 
+    // The answer goes first, always.
+    //
+    // A burst is flushed from a microtask, which is a whole turn later than
+    // this method runs — so an aside queued in the same synchronous stretch as
+    // the reply and its cards would join the chain *ahead* of them. Measured on
+    // a device: the follow-up line beat the flight card by 2ms, and the
+    // passenger was told "you could book the recommended one" six seconds
+    // before hearing what the options were.
+    //
+    // Flushing here rather than deferring the aside, because an aside is also
+    // queued at the *start* of a turn (the acknowledgement) when there is
+    // nothing pending — that one must stay immediate, and deferring every aside
+    // by a microtask would put it behind the next burst instead of in front of
+    // it. The already-scheduled microtask still runs and finds the sources
+    // drained.
+    if (_burstFlushScheduled) _flushBurstSpeech();
+
     // The echo guard compares what the microphone hears against this, and for a
     // turn whose answer is silent (voice output off mid-turn, or an empty
     // reply) this is the last thing that actually came out of the speaker.
@@ -1254,14 +1586,34 @@ class ChatViewModel extends StateNotifier<ChatState> {
     _pendingUtterances++;
     _emitActivity(SpeechActivity.preparing);
 
+    // Logged as `aside`, and deliberately noting that this joins the chain
+    // synchronously while a burst waits on a microtask: the two are queued from
+    // the same turn, so their relative order here is the order they are heard.
+    final id = SpeechLog.queued(
+      'aside',
+      text,
+      detail: 'burstPending=$_burstFlushScheduled',
+    );
+
     final queued = Stopwatch()..start();
+    final epoch = _speechEpoch;
+    final seq = ++_queueSeq;
+    final rendering = _renderAhead(
+      text,
+      summarize: false,
+      epoch: epoch,
+      logId: id,
+      aside: true,
+    );
     _speechChain = _speechChain.then(
       (_) => _speakSafely(
-            text,
-            summarize: false,
-            queuedFor: queued,
-            aside: true,
-          ),
+        rendering,
+        epoch: epoch,
+        seq: seq,
+        queuedFor: queued,
+        aside: true,
+        logId: id,
+      ),
     );
   }
 
@@ -1305,74 +1657,139 @@ class ChatViewModel extends StateNotifier<ChatState> {
     return message.text.trim().isEmpty ? null : SpokenLine.prose(message.text);
   }
 
-  /// Cuts the assistant off mid-sentence. Called from every deliberate
-  /// passenger interaction — a typed message, a suggestion chip, a tap on a
-  /// journey card, an answer to a confirmation, the mic — because carrying on
-  /// reading out a reply the passenger has already moved past reads as the
+  /// Cuts the assistant off mid-sentence **and drops anything still queued**
+  /// — the follow-up "you can say check me in" included. Called from every
+  /// deliberate passenger interaction — a typed message, a suggestion chip, a
+  /// tap on a journey card, an answer to a confirmation, the mic — because
+  /// carrying on after the passenger has already moved past reads as the
   /// assistant not listening. Deliberately fires even when the interaction is
   /// then dropped (e.g. a tap that lands while [ChatState.isBusy]): the
   /// passenger acted either way.
   ///
-  /// Silences what is *audible*. Anything still being synthesized will still
-  /// play when its bytes arrive — use [abortSpeechQueue] to prevent that.
+  /// Does not emit [SpeechActivity.settled]: the caller is usually about to
+  /// queue a new acknowledgement, and a settled edge here would reopen the
+  /// microphone on a turn that has only just started. Use [abortSpeechQueue]
+  /// when the conversation is actually over (interrupt, leave audio mode).
   void stopSpeaking() {
+    _dropQueuedSpeech('user acted');
     unawaited(_stopSpeakingSafely());
   }
 
-  /// Abandons everything queued, in flight, or playing.
-  ///
-  /// [stopSpeaking] alone is not enough to go quiet: an utterance whose audio
-  /// is still being fetched has nothing to stop yet, and would begin playing
-  /// the moment it arrived — seconds after the passenger interrupted. Bumping
-  /// the epoch makes every in-flight link abandon itself instead.
+  /// Abandons everything queued, in flight, or playing, and reports the turn
+  /// as settled — the interrupt / leave-audio-mode path.
   void abortSpeechQueue() {
-    _speechEpoch++;
-    _burstSpeechSources.clear();
-    _pendingUtterances = 0;
+    _dropQueuedSpeech('queue abandoned');
     unawaited(_stopSpeakingSafely());
     _emitActivity(SpeechActivity.settled);
   }
 
-  /// Prepares and plays [speechSource]. The session is re-checked either side
-  /// of preparation, because synthesis outlives the turn that started it: the
-  /// passenger can leave, mute, or interrupt while it is in flight.
-  Future<void> _speakSafely(
+  /// Bumps the speech epoch so every in-flight link abandons itself, and
+  /// clears a burst that has not flushed yet. Without the epoch bump,
+  /// [stopSpeaking] only silences what is audible: a follow-up already in
+  /// the chain (the spoken suggestion line) would start the moment the
+  /// current clip ended.
+  void _dropQueuedSpeech(String reason) {
+    SpeechLog.aborted(
+      '$reason (pending=$_pendingUtterances '
+      'burstSources=${_burstSpeechSources.length})',
+    );
+    _speechEpoch++;
+    _burstSpeechSources.clear();
+    _burstFlushScheduled = false;
+    _pendingUtterances = 0;
+  }
+
+  /// Words [speechSource] and renders its opening chunk **without waiting for
+  /// the speaker to be free**.
+  ///
+  /// This is the difference between the acknowledgement covering the wait and
+  /// merely preceding it. The acknowledgement exists to fill the seconds a turn
+  /// takes, but the answer's own preparation — an LLM rewrite of up to 3.4s,
+  /// then synthesis — used to begin only once the acknowledgement had finished
+  /// playing, because it lived inside the chained link. Measured on a device:
+  /// the backend answered 1.0s before the acknowledgement ended, and the
+  /// passenger still waited another 3.4s in silence while the summarizer ran on
+  /// text that had been sitting ready the whole time.
+  ///
+  /// Started at queue time instead, that work happens *during* the
+  /// acknowledgement, and [_speakSafely] finds a finished clip waiting.
+  ///
+  /// Safe to run concurrently with playback: both synthesizers' `prepare` is
+  /// stateless — Cartesia posts and returns bytes, the device engine only
+  /// stamps the text for `play` to render — so nothing here touches the audio
+  /// currently coming out of the speaker.
+  Future<_RenderedSpeech?> _renderAhead(
     String speechSource, {
-    bool summarize = true,
+    required bool summarize,
+    required int epoch,
+    required int logId,
+    required bool aside,
+  }) async {
+    // Summarized once for the whole line, then split — so both halves are
+    // worded by the same pass and only one LLM round trip is paid for.
+    final spoken = await _resolveSpokenTextSafely(speechSource, summarize);
+    if (spoken.trim().isEmpty || epoch != _speechEpoch) return null;
+    SpeechLog.resolved(logId, spoken, summarized: summarize);
+
+    // An acknowledgement is split per sentence on either engine, because for it
+    // the split is not about render latency at all — it is what gives
+    // [_speakSafely] a boundary to stop on once the answer lands.
+    //
+    // For an answer, chunking exists only to overlap a network render with
+    // playback. The device engine has no render step — it speaks as it goes —
+    // so splitting there would put seams between the pieces for nothing.
+    final chunks = aside
+        ? sentencesForSpeech(spoken)
+        : _voiceService.rendersAheadOfPlayback
+            ? chunkForSpeech(spoken)
+            : [spoken];
+    SpeechLog.chunked(logId, chunks);
+
+    return _RenderedSpeech(
+        chunks, await _prepareSpeechSafely(chunks.first, false));
+  }
+
+  /// Plays what [rendering] produced, once whatever is in front of it has
+  /// finished. The session is re-checked either side of the wait, because
+  /// synthesis outlives the turn that started it: the passenger can leave,
+  /// mute, or interrupt while it is in flight.
+  ///
+  /// [epoch] is captured when the utterance was *queued*, not when this runs —
+  /// so [abortSpeechQueue] discards work that was already in the chain behind
+  /// the interruption, rather than letting it read the post-abort epoch and
+  /// carry on.
+  Future<void> _speakSafely(
+    Future<_RenderedSpeech?> rendering, {
+    required int epoch,
+    required int seq,
     Stopwatch? queuedFor,
     bool aside = false,
+    int logId = 0,
   }) async {
-    final epoch = _speechEpoch;
     final trace = SpeechTrace.begin(
       'text→audio',
-      detail: 'chars=${speechSource.length} '
-          'summarize=$summarize '
-          'queued=${queuedFor?.elapsedMilliseconds ?? 0}ms',
+      detail: 'queued=${queuedFor?.elapsedMilliseconds ?? 0}ms',
     );
 
     try {
-      // Summarized once for the whole line, then split — so both halves are
-      // worded by the same pass and only one LLM round trip is paid for.
-      final spoken = await _resolveSpokenTextSafely(speechSource, summarize);
-      if (spoken.trim().isEmpty || epoch != _speechEpoch) {
+      final rendered = await rendering;
+      if (rendered == null || epoch != _speechEpoch) {
         trace?.end(detail: 'aborted=no-text');
+        SpeechLog.finished(
+          logId,
+          rendered == null ? 'aborted=no-text' : 'aborted=interrupted',
+        );
         return;
       }
 
-      // Chunking exists to overlap a network render with playback. The device
-      // engine has no render step — it speaks as it goes — so splitting there
-      // would only put seams between the pieces for nothing.
-      final chunks = _voiceService.rendersAheadOfPlayback
-          ? chunkForSpeech(spoken)
-          : [spoken];
+      final chunks = rendered.chunks;
       var spokeAnything = false;
 
-      // The pipeline: each chunk's synthesis is started before the previous
-      // one is played, so the remainder renders during playback instead of
-      // after it. Without this the split would make things slower, not faster —
-      // two sequential round trips rather than one.
-      Future<PreparedSpeech?>? pending =
-          _prepareSpeechSafely(chunks.first, false);
+      // The first chunk is already rendered — that is the whole point of
+      // [_renderAhead]. From the second onwards the pipeline resumes: each
+      // chunk's synthesis is started before the previous one is played, so the
+      // remainder renders during playback instead of after it.
+      Future<PreparedSpeech?>? pending = Future.value(rendered.first);
 
       for (var i = 0; i < chunks.length; i++) {
         final prepared = await pending;
@@ -1380,13 +1797,32 @@ class ChatViewModel extends StateNotifier<ChatState> {
             ? _prepareSpeechSafely(chunks[i + 1], false)
             : null;
 
+        // The filler has done its job: the answer it was covering is queued
+        // behind it, so the rest of it would delay the very thing it exists to
+        // introduce. Measured before this: a 132-character acknowledgement kept
+        // talking for 3.1s after the flight options were ready to speak.
+        //
+        // Never before the first sentence — something has to be said, or a
+        // request is met with the silence the acknowledgement was added to
+        // remove. Stopping between sentences rather than mid-word is what keeps
+        // it sounding like a person finishing a thought.
+        if (aside && i > 0 && _answerSeq > seq) {
+          trace?.end(detail: 'ack cut short at ${i}/${chunks.length}');
+          SpeechLog.finished(
+            logId,
+            'cut short — answer ready',
+            detail: 'spoke $i of ${chunks.length} sentences',
+          );
+          return;
+        }
+
         if (prepared == null ||
             epoch != _speechEpoch ||
             !mounted ||
             !state.isVoiceOutputEnabled) {
-          trace?.end(
-            detail: prepared == null ? 'aborted=no-audio' : 'aborted=left',
-          );
+          final why = prepared == null ? 'aborted=no-audio' : 'aborted=left';
+          trace?.end(detail: why);
+          SpeechLog.finished(logId, why, detail: 'atChunk=${i + 1}');
           return;
         }
 
@@ -1399,12 +1835,34 @@ class ChatViewModel extends StateNotifier<ChatState> {
             aside ? SpeechActivity.acknowledging : SpeechActivity.playing,
           );
         }
+        SpeechLog.speaking(
+          logId,
+          prepared.spokenText,
+          chunk: i + 1,
+          ofChunks: chunks.length,
+        );
         await _playSpeechSafely(prepared);
       }
       trace?.end(detail: 'chunks=${chunks.length}');
+      SpeechLog.finished(logId, 'done', detail: 'chunks=${chunks.length}');
+    } catch (error) {
+      // This future *is* [_speechChain]. Letting it reject would leave every
+      // utterance queued behind it unspoken for the rest of the session, and
+      // surface as an unhandled async error far from here. The individual steps
+      // all swallow their own failures, so reaching this is unexpected rather
+      // than routine — but the cost of being wrong about that is silence.
+      trace?.end(detail: 'aborted=threw');
+      SpeechLog.finished(logId, 'aborted=threw',
+          detail: '${error.runtimeType}');
     } finally {
-      if (epoch == _speechEpoch && _pendingUtterances > 0) _pendingUtterances--;
-      _settleIfQuiet();
+      // Aborted links must not decrement or settle: [_dropQueuedSpeech] already
+      // zeroed the count, and a settled edge here would reopen the microphone
+      // on a turn the passenger has only just started (or a sheet they just
+      // opened).
+      if (epoch == _speechEpoch) {
+        if (_pendingUtterances > 0) _pendingUtterances--;
+        _settleIfQuiet();
+      }
     }
   }
 
@@ -1506,6 +1964,19 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 }
 
+/// One utterance, worded and part-rendered, waiting only for the speaker.
+///
+/// [first] is the opening chunk's audio, already synthesized; the rest of
+/// [chunks] are rendered as playback moves through them. `null` means the
+/// synthesizer had nothing to give, which the caller treats as "say nothing"
+/// rather than as an error — voice output is never allowed to break the chat.
+class _RenderedSpeech {
+  const _RenderedSpeech(this.chunks, this.first);
+
+  final List<String> chunks;
+  final PreparedSpeech? first;
+}
+
 /// The scenario a scheduled reminder currently points at, if any — set by
 /// [ChatViewModel._scheduleNextUseCaseReminder] and consumed by [ChatPage],
 /// so that opening the AI assistant directly (instead of tapping the
@@ -1525,6 +1996,8 @@ final chatViewModelProvider =
   final account = ref.watch(activeAccountProvider);
   return ChatViewModel(
     flightService: FlightServices(memberNo: account.memberNo),
+    conciergeMoments:
+        ref.watch(conciergeMomentsServiceProvider(account.memberNo)),
     travelerFirstName: account.firstName,
     sendMessageUseCase: ref.watch(sendMessageUseCaseProvider),
     classifyIntentUseCase: ref.watch(classifyIntentUseCaseProvider),

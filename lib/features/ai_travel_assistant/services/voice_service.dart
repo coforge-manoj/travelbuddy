@@ -124,10 +124,18 @@ class VoiceService implements ConversationVoicePort {
   /// experiences that as being cut off after a second or two and never heard
   /// out.
   ///
-  /// 3s is closer to how long a person waits before assuming you have finished.
-  /// The cost of being too generous is only a slightly later reply; the cost of
-  /// being too eager is answering the wrong question.
-  static const defaultPauseFor = Duration(seconds: 3);
+  /// 3s was closer to how long a person waits before assuming you have
+  /// finished, but on-device it still cut people off: a session captured
+  /// "let's go from" and "on 14th August" as complete turns, each answered as
+  /// if it were the whole request. Both are the middle of a sentence someone
+  /// was still assembling.
+  ///
+  /// 3.5s because the two costs are not symmetric. Being too generous delays
+  /// the reply by a second; being too eager answers the wrong question, and
+  /// then the passenger has to hear the wrong answer out before they can
+  /// correct it. Half a second off 4s trims the wait without going back to
+  /// the 3s cutoff that split mid-sentence turns.
+  static const defaultPauseFor = Duration(milliseconds: 3500);
 
   /// A ceiling on one turn, so a stuck recognizer can't hold the loop open.
   /// Generous, because it should only ever catch a genuinely stuck session —

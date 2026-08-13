@@ -12,10 +12,12 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/cabin_seat_map.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/cancellation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/document_check.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/extras_catalogue.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_selection.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/member_wallet.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat_confirmation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/travel_history.dart';
@@ -30,10 +32,12 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/wi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmation_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmed_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/cancellation_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/document_check_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/extras_list_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_offers_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_selected_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_status_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/member_wallet_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/travel_history_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/upgrade_quote_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/cabin_seat_map_card.dart';
@@ -99,6 +103,12 @@ class RichCardWidget extends ConsumerWidget {
         CancellationCard(cancellation: message.payload! as Cancellation),
       ChatMessageType.travelHistoryCard =>
         TravelHistoryCard(history: message.payload! as TravelHistory),
+
+      ChatMessageType.memberWalletCard =>
+        MemberWalletCard(wallet: message.payload! as MemberWallet),
+
+      ChatMessageType.documentCheckCard =>
+        DocumentCheckCard(check: message.payload! as DocumentCheck),
 
       ChatMessageType.text || ChatMessageType.error =>
         _AgentEscalationCard(escalation: null, text: message.text),

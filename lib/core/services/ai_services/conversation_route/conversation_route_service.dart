@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../features/ai_travel_assistant/domain/entities/intent.dart';
+import '../../../utils/app_date.dart';
 import '../ai_json_parser.dart';
 import 'conversation_router_result.dart';
 import 'conversational_route_promt.dart' show ConversationRouterPrompt;
@@ -42,6 +43,13 @@ class ConversationRouterService {
         {
           "role": "system",
           "content": ConversationRouterPrompt.systemPrompt,
+        },
+        {
+          // The router writes the normalizedPrompt that reaches the backend,
+          // so it needs the same date grounding the classifier has — "make it
+          // tomorrow instead" arrives here, not there.
+          "role": "system",
+          "content": AppDate.promptContext,
         },
         {
           "role": "user",

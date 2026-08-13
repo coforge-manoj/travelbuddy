@@ -1,3 +1,4 @@
+import 'package:ai_travel_assistant/core/utils/app_date.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/airport_info.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/basket.dart';
@@ -7,10 +8,12 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/cabin_seat_map.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/cancellation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/document_check.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/extras_catalogue.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_selection.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/member_wallet.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat_confirmation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/travel_history.dart';
@@ -120,6 +123,12 @@ class CardSpeechTextBuilder {
 
       case ChatMessageType.travelHistoryCard:
         return _card(caption, _travelHistory(payload));
+
+      case ChatMessageType.memberWalletCard:
+        return _card(caption, _memberWallet(payload));
+
+      case ChatMessageType.documentCheckCard:
+        return _card(caption, _documentCheck(payload));
 
       case ChatMessageType.agentEscalationCard:
       case ChatMessageType.actionSummaryCard:
@@ -461,7 +470,9 @@ class CardSpeechTextBuilder {
     ];
 
     final line = StringBuffer(opening.join(', '));
-    if (payload.date != null) line.write(' on ${payload.date}');
+    if (payload.date != null) {
+      line.write(' on ${AppDate.formatSpokenRaw(payload.date)}');
+    }
     line.write('.');
 
     if (payload.seat != null) line.write(' Seat ${_spellOut(payload.seat!)}.');
@@ -513,10 +524,12 @@ class CardSpeechTextBuilder {
     if (payload.seatsAvailable != null && payload.seatsAvailable! > 0) {
       line.write(
         '${_countWord(payload.seatsAvailable!)} '
-        '${payload.seatsAvailable == 1 ? 'seat' : 'seats'} left.',
+        '${payload.seatsAvailable == 1 ? 'seat' : 'seats'} left. ',
       );
     }
-    return line.toString().trim();
+    // Same ask checkout and cancel use: the quote is a preview, and the
+    // confirmation bar is invisible from audio mode.
+    return '${line.toString().trim()} Shall I go ahead?';
   }
 
   String? _cancellation(Object? payload) {
@@ -561,7 +574,8 @@ class CardSpeechTextBuilder {
     if (payload.flights.isNotEmpty) {
       final recent = payload.flights.take(2).map((f) {
         final parts = StringBuffer(
-          '${_flightNumber(f.flightNumber)} on ${f.date}, ${_route(f.route)}',
+          '${_flightNumber(f.flightNumber)} on '
+          '${AppDate.formatSpokenRaw(f.date)}, ${_route(f.route)}',
         );
         if (f.cabin.isNotEmpty) parts.write(' in ${f.cabin}');
         return parts.toString();
@@ -569,6 +583,89 @@ class CardSpeechTextBuilder {
       line.write('Most recently $recent.');
     }
     return line.toString().trim();
+  }
+
+  /// The wallet is a balance, so it leads with miles — the number the
+  /// question was actually about. Loyalty points are deliberately skipped:
+  /// two large numbers in one breath are indistinguishable by ear, and the
+  /// spendable one is the one that answers "can we do this on miles?".
+  ///
+  /// The card's last four digits are spelled out; read as a number, "4417"
+  /// becomes "four thousand four hundred and seventeen".
+  String? _memberWallet(Object? payload) {
+    if (payload is! MemberWallet) return null;
+
+    final parts = <String>[];
+    if (payload.miles != null) {
+      // Matches how every other card speaks a miles figure — a plain rounded
+      // number, not `_money`, since miles are not currency.
+      parts.add('${payload.miles!.round()} miles');
+    }
+    final voucher = payload.voucher;
+    if (voucher?.amount != null) {
+      parts.add('a ${_money(voucher!.amount!, 'USD')} voucher');
+    }
+    final card = payload.card;
+    if (card?.last4 != null) {
+      final brand = card!.brand == null ? 'card' : '${card.brand} card';
+      // [_spellLetters], not [_spellOut]: the latter keeps digit runs
+      // grouped, so "4417" would be read "four thousand four hundred and
+      // seventeen". Card digits are matched against a physical card, so they
+      // are read one at a time — the same reason PNRs are.
+      parts.add('and your $brand ending ${_spellLetters(card.last4!)}');
+    }
+    if (parts.isEmpty) return null;
+
+    final line = StringBuffer('You have ${parts.join(', ')}.');
+    if (payload.tier != null) {
+      line.write(" You're ${payload.tier}.");
+    }
+    return line.toString();
+  }
+
+  /// Documents are the one card where the spoken version has to carry the
+  /// remedy, not just the problem. Heard without "what to do about it", a
+  /// passport warning is pure alarm — and unlike the screen, the listener
+  /// cannot scan back for the fix.
+  ///
+  /// Only the first two issues are spoken. The seeded party has two, and a
+  /// longer list read aloud stops being actionable.
+  String? _documentCheck(Object? payload) {
+    if (payload is! DocumentCheck) return null;
+
+    if (payload.issues.isEmpty) {
+      if (payload.clear.isEmpty) return null;
+      final where =
+          payload.destination == null ? '' : ' for ${payload.destination}';
+      return 'Everyone\'s documents are in order$where.';
+    }
+
+    final line = StringBuffer(
+      '${_countWord(payload.issues.length)} '
+      '${payload.issues.length == 1 ? 'passenger needs' : 'passengers need'} '
+      'attention. ',
+    );
+    for (final issue in payload.issues.take(2)) {
+      line.write('${issue.passenger}: ');
+      if (issue.detail != null) line.write('${_stripDates(issue.detail!)} ');
+      if (issue.action != null) line.write('${issue.action} ');
+    }
+    return line.toString().trim();
+  }
+
+  /// Renders ISO dates inside a sentence as something sayable: "2027-04-09"
+  /// read raw comes out as "two thousand and twenty seven dash zero four".
+  String _stripDates(String text) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return text.replaceAllMapped(RegExp(r'(\d{4})-(\d{2})-(\d{2})'), (m) {
+      final month = int.parse(m.group(2)!);
+      final day = int.parse(m.group(3)!);
+      if (month < 1 || month > 12) return m.group(0)!;
+      return '${months[month - 1]} $day, ${m.group(1)}';
+    });
   }
 
   // -------------------------------------------------------------------

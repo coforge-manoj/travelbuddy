@@ -5,8 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ai_travel_assistant/core/services/active_account_store.dart';
 import 'package:ai_travel_assistant/core/services/shared_preferences_provider.dart';
-import 'package:ai_travel_assistant/features/account/presentation/pages/account_list_page.dart';
 import 'package:ai_travel_assistant/features/landing/presentation/pages/landing_page.dart';
+import 'package:ai_travel_assistant/features/settings/presentation/pages/more_page.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +18,7 @@ void main() {
     return SharedPreferences.getInstance();
   }
 
-  testWidgets('the home greeting opens the switcher and adopts the picked account',
+  testWidgets('switching member on the More tab updates the home greeting',
       (tester) async {
     final preferences = await freshPreferences();
 
@@ -33,9 +33,11 @@ void main() {
     // Default account on a fresh install.
     expect(find.text('Hi, Elena'), findsOneWidget);
 
-    await tester.tap(find.text('Hi, Elena'));
+    // The greeting is no longer the switcher — the More tab is.
+    await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
-    expect(find.byType(AccountListPage), findsOneWidget);
+    expect(find.byType(MorePage), findsOneWidget);
+    expect(find.text('Signed in as Elena Vargas'), findsOneWidget);
     for (final account in demoAccounts) {
       expect(find.text(account.fullName), findsOneWidget);
     }
@@ -43,11 +45,16 @@ void main() {
     await tester.tap(find.text('Ava Delgado'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AccountListPage), findsNothing);
-    expect(find.text('Hi, Ava'), findsOneWidget);
+    // Selection is reflected in place — the page does not pop.
+    expect(find.byType(MorePage), findsOneWidget);
+    expect(find.text('Signed in as Ava Delgado'), findsOneWidget);
     // The member number is what every backend call carries, so it is the
     // part that has to stick.
     expect(preferences.getString('active_member_no'), '3XK41RT');
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Hi, Ava'), findsOneWidget);
   });
 
   test('the stored member number is restored on the next launch', () async {

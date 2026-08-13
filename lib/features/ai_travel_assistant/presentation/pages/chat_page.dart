@@ -19,13 +19,21 @@ import 'package:ai_travel_assistant/features/concierge_demo/presentation/widgets
 /// `Navigator.push(context, AiTravelAssistantEntryPoint.route())` — it's
 /// fully self-contained given the providers wired in `core/di/providers.dart`.
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key, this.autoStartScenarioId});
+  const ChatPage({super.key, this.autoStartScenarioId, this.openingLine});
 
   /// A Journey Concierge scenario id to kick off as soon as this page
   /// opens — set when a passenger taps the post-use-case reminder
   /// notification, so tapping it lands them straight back in the concierge
   /// conversation instead of just the plain welcome screen.
   final String? autoStartScenarioId;
+
+  /// Backend-written copy to open the conversation with, in place of the
+  /// generic welcome — set when a passenger taps a *live* proactive moment.
+  ///
+  /// Unlike [autoStartScenarioId] this starts no scripted scenario: the
+  /// notification is only an opening line, and whatever the passenger says
+  /// next goes to `/chat` as ordinary free text.
+  final String? openingLine;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -46,6 +54,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     // `ChatViewModel._scheduleNextUseCaseReminder`), so backing out before
     // finishing it and reopening the assistant resumes the same use case
     // again instead of losing it.
+    // A live proactive moment outranks any scripted one: the passenger tapped
+    // a notification the backend wrote, so that copy opens the conversation
+    // and no scenario is started.
+    final openingLine = widget.openingLine;
+    if (openingLine != null && openingLine.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref
+            .read(chatViewModelProvider.notifier)
+            .startFromProactiveMessage(openingLine);
+      });
+      return;
+    }
+
     final tappedScenarioId = widget.autoStartScenarioId;
     final pendingScenarioId = ref.read(pendingNextScenarioIdProvider);
     final effectiveScenarioId = tappedScenarioId ?? pendingScenarioId;

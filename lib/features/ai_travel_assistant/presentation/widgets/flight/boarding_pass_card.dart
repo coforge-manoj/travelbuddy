@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:ai_travel_assistant/core/utils/app_date.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/boarding_pass.dart';
 
 /// The `boarding_pass` card. Laid out as a pass rather than a list of rows:
@@ -96,7 +97,7 @@ class BoardingPassCard extends StatelessWidget {
                       if (pass.flightNumber.isNotEmpty &&
                           (pass.origin.isNotEmpty || pass.destination.isNotEmpty))
                         pass.flightNumber,
-                      if (pass.date != null) pass.date!,
+                      if (pass.date != null) AppDate.formatRaw(pass.date)!,
                       if (pass.passengerName.isNotEmpty) pass.passengerName,
                     ].join(' · '),
                     style: theme.textTheme.bodySmall

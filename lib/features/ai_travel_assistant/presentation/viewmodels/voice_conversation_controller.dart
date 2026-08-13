@@ -9,6 +9,7 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/vi
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_conversation_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/voice_transcript_rules.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/acknowledgement_composer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_log.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice/mic_level_meter.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
@@ -40,7 +41,8 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_
 /// completes and still renders its cards — it just is not spoken. Aborting
 /// locally would leave the screen disagreeing with a booking that really did
 /// go through.
-class VoiceConversationController extends StateNotifier<VoiceConversationState> {
+class VoiceConversationController
+    extends StateNotifier<VoiceConversationState> {
   VoiceConversationController({
     required ConversationVoicePort voice,
     required ChatViewModel chat,
@@ -127,10 +129,21 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
   /// resuming can put it back.
   bool _wasActiveOnPause = false;
 
+  /// Whether this session turned chat TTS on because the More-tab default
+  /// (and this chat session) had it off.
+  ///
+  /// Voice mode cannot run muted — the microphone reopens on speech settling
+  /// — so it enables output for the duration of the loop and must put it
+  /// back when the passenger leaves. Without the restore, closing voice mode
+  /// leaves the transcript reading every subsequent card aloud.
+  bool _borrowedChatVoiceOutput = false;
+
   /// Opens the microphone and starts the loop.
   ///
-  /// Speaks nothing on entry — the passenger opened audio mode to talk, and
-  /// re-entering mid-conversation should not replay the last answer.
+  /// A fresh session — the welcome still sitting unread — is spoken first,
+  /// then the microphone opens when that line settles. Re-entering mid-
+  /// conversation skips that: the passenger opened audio mode to talk, not
+  /// to hear the last answer again.
   Future<void> start() async {
     if (state.isActive) return;
     _turn++;
@@ -155,10 +168,29 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
 
     // Voice output drives the loop: the microphone reopens when speech settles,
     // so with it off nothing would ever settle and the loop would stall in
-    // `thinking` until the watchdog fired.
-    if (!_chat.state.isVoiceOutputEnabled) _chat.toggleVoiceOutput();
+    // `thinking` until the watchdog fired. Borrowed only for this session —
+    // [stop] puts the passenger's chat-TTS preference back.
+    if (!_chat.state.isVoiceOutputEnabled) {
+      _chat.setVoiceOutputEnabled(true);
+      _borrowedChatVoiceOutput = true;
+    }
 
     _speechSubscription ??= _chat.speechActivity.listen(_onSpeechActivity);
+
+    final opening = _chat.unspokenOpening;
+    if (opening != null) {
+      // Shown as the caption while it plays, then cleared when the
+      // microphone opens. `thinking` rather than `speaking` so the words
+      // themselves are on screen during TTS prep, not just "Speaking…".
+      state = state.copyWith(
+        phase: VoicePhase.thinking,
+        acknowledgement: opening,
+      );
+      _startWatchdog(turn);
+      _chat.speakLine(opening);
+      return;
+    }
+
     await _openMicrophone();
   }
 
@@ -187,12 +219,28 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
     _turn++;
     _cancelTimers();
     _silenceMic();
+    // Restore before any await: a turn still in flight would otherwise keep
+    // queuing speech onto a chat session that is already back on screen, and
+    // the More-tab "off" default would appear to have been ignored.
+    _restoreChatVoiceOutput();
+    _chat.abortSpeechQueue();
     await _speechSubscription?.cancel();
     _speechSubscription = null;
     await _voice.cancelListening();
-    _chat.abortSpeechQueue();
     if (!mounted) return;
     state = state.copyWith(phase: VoicePhase.idle, partialTranscript: '');
+  }
+
+  /// Puts chat TTS back to whatever it was before this loop borrowed it.
+  ///
+  /// Idempotent: [stop] and [dispose] both call it, and a session that never
+  /// needed to borrow is a no-op. Must not wait on [ChatViewModel.mounted] —
+  /// the chat notifier outlives this loop (ChatPage stays under the voice
+  /// page) and is exactly what we need to mute.
+  void _restoreChatVoiceOutput() {
+    if (!_borrowedChatVoiceOutput) return;
+    _borrowedChatVoiceOutput = false;
+    _chat.setVoiceOutputEnabled(false);
   }
 
   /// Reopens the microphone after the loop has gone [VoicePhase.idle] —
@@ -260,6 +308,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
       acknowledgement: '',
     );
     _sinceReopened = Stopwatch()..start();
+    SpeechLog.listening();
 
     try {
       final started = await _voice.startListening(
@@ -329,6 +378,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
 
     if (heard.isEmpty) {
       _conclude();
+      SpeechLog.unheard('silent turn');
       _onSilentTurn();
       return;
     }
@@ -343,6 +393,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
       state.lastSpokenLine,
       sinceReopened: _sinceReopened?.elapsed ?? Duration.zero,
     )) {
+      SpeechLog.heard(heard, 'dropped=echo of assistant');
       unawaited(_reopenAfterGap());
       return;
     }
@@ -382,6 +433,18 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
         ),
       _ => _acknowledgements.compose(transcript, confirming: confirming),
     };
+
+    SpeechLog.heard(
+      transcript,
+      switch ((confirming, declining, dropsPending)) {
+        (true, _, _) => 'confirm pending action',
+        (_, true, _) => 'decline pending action',
+        (_, _, true) => 'chat (drops pending approval)',
+        _ => 'chat',
+      },
+      detail:
+          'ack=${acknowledgement.isEmpty ? 'none' : '${acknowledgement.length} chars'}',
+    );
 
     state = state.copyWith(
       phase: VoicePhase.thinking,
@@ -526,6 +589,7 @@ class VoiceConversationController extends StateNotifier<VoiceConversationState> 
 
   @override
   void dispose() {
+    _restoreChatVoiceOutput();
     _cancelTimers();
     unawaited(_speechSubscription?.cancel());
     _speechSubscription = null;

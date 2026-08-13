@@ -225,6 +225,57 @@ void main() {
     expect(viewModel.state.awaitingSearchDetails, isFalse);
   });
 
+  test('an upgrade quote parks confirmation even when the flag is omitted',
+      () async {
+    // Live `quote_upgrade` returns the card without `needsConfirmation`.
+    // Postman still expects the same Confirm / yes path as checkout.
+    flightService.enqueue({
+      'reply': 'Main Cabin to Flagship Business is \$2439.',
+      'tool': 'quote_upgrade',
+      'cards': [
+        {
+          'type': 'upgrade_quote',
+          'from': 'Main Cabin',
+          'to': 'Flagship Business',
+          'difference': 2439,
+          'payWithMiles': {'miles': 243900, 'affordable': true},
+        },
+      ],
+      'needsConfirmation': false,
+      'suggestions': ['Check me in', 'Change my seat'],
+    });
+
+    await viewModel.sendMessage('upgrade to Business');
+    await pumpEventQueue();
+
+    expect(viewModel.state.needsConfirmation, isTrue);
+    expect(
+      viewModel.state.pendingConfirmationPrompt,
+      contains('Shall I go ahead?'),
+    );
+
+    flightService.enqueue({
+      'reply': 'Upgraded to Flagship Business.',
+      'tool': 'confirm_upgrade',
+      'cards': [
+        {
+          'type': 'booking_detail',
+          'pnr': 'LYVKKB',
+          'to': 'Flagship Business',
+        },
+      ],
+      'needsConfirmation': false,
+    });
+
+    await viewModel.confirmPendingAction();
+    await pumpEventQueue();
+
+    expect(flightService.posts, hasLength(2));
+    expect(flightService.posts[1].message, 'yes');
+    expect(flightService.posts[1].confirm, isTrue);
+    expect(viewModel.state.needsConfirmation, isFalse);
+  });
+
   test('confirm-flag misfire repairs once with the alternate affirmation',
       () async {
     // First turn: cancel preview asking for approval.

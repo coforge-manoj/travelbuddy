@@ -79,7 +79,8 @@ void main() {
     agentRepository = MockAgentRepository();
     historyRepository = MockChatHistoryRepository();
 
-    when(() => historyRepository.clearHistory()).thenAnswer((_) async => const Result.success(null));
+    when(() => historyRepository.clearHistory())
+        .thenAnswer((_) async => const Result.success(null));
     when(() => historyRepository.saveMessage(any()))
         .thenAnswer((_) async => const Result.success(null));
     when(
@@ -121,8 +122,11 @@ void main() {
     // not any more — they only appear once the passenger asks to book — so a
     // fresh session is exactly one bubble.
     expect(viewModel.state.messages, hasLength(1));
-    expect(viewModel.state.messages.single.text, contains('Hello'));
-    expect(viewModel.state.messages.single.type, ChatMessageType.text);
+    final welcome = viewModel.state.messages.single;
+    expect(welcome.role, ChatRole.assistant);
+    expect(welcome.type, ChatMessageType.text);
+    expect(welcome.text, contains('Elena'));
+    expect(viewModel.unspokenOpening, welcome.text);
     verify(() => historyRepository.clearHistory()).called(1);
     verifyNever(
       () => flightRepository.searchFlights(
@@ -132,23 +136,25 @@ void main() {
     );
   });
 
-  test('low-confidence intent offers human escalation instead of guessing', () async {
+  test('low-confidence intent offers human escalation instead of guessing',
+      () async {
     when(() => chatRepository.classifyIntent(any())).thenAnswer(
-      (_) async =>
-          const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
+      (_) async => const Result.success(
+          IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
     );
 
     await viewModel.sendMessage('uhh something about my thing');
     await pumpEventQueue();
 
-    expect(viewModel.state.messages.last.text, contains('customer support agent'));
+    expect(
+        viewModel.state.messages.last.text, contains('customer support agent'));
     verifyNever(() => seatRepository.getSeatMap(any()));
   });
 
   test('a repository failure surfaces as an inline error message', () async {
     when(() => chatRepository.classifyIntent(any())).thenAnswer(
-      (_) async =>
-          const Result.success(IntentResult(type: IntentType.flightStatus, confidence: 0.9)),
+      (_) async => const Result.success(
+          IntentResult(type: IntentType.flightStatus, confidence: 0.9)),
     );
     when(() => flightRepository.getFlightStatus(any()))
         .thenAnswer((_) async => const Result.failure(NetworkFailure()));

@@ -104,6 +104,24 @@ List<String> chunkForSpeech(String text) {
   return chunks.length < 2 ? [trimmed] : chunks;
 }
 
+/// Splits [text] into one chunk per sentence, however short they are.
+///
+/// [chunkForSpeech] packs sentences together to keep audio continuous, which is
+/// right for an answer: it is going to be spoken in full, so seams are the only
+/// thing worth optimizing against. A filler is different — it exists to cover a
+/// wait, and the moment the wait is over the rest of it is dead weight. One
+/// sentence per chunk gives the player somewhere to stop.
+///
+/// Sentence boundaries rather than a hard cut, because stopping mid-clause is
+/// heard as a glitch while stopping after "Got it, so you want me to book a
+/// flight to London." is heard as someone who simply finished their thought.
+List<String> sentencesForSpeech(String text) {
+  final trimmed = text.trim();
+  if (trimmed.isEmpty) return const [];
+  final sentences = _splitSentences(trimmed);
+  return sentences.isEmpty ? [trimmed] : sentences;
+}
+
 /// Splits on sentence-ending punctuation, keeping the punctuation attached.
 List<String> _splitSentences(String text) {
   final sentences = <String>[];

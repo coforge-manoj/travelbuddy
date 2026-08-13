@@ -1,24 +1,58 @@
 /// Pinned snapshot of TravelBuddy chat capabilities.
 ///
-/// **Source:** tools and card types observed on live `POST /api/v1/chat`
-/// payloads captured in [journey_live_payloads_test.dart] (2026-08-07), not
-/// a fresh `GET /api/v1/chat/capabilities` response — the tunnel was
-/// unreachable when this fixture was written. Replace this map wholesale
-/// once that endpoint can be captured; [JourneyStage.values] must stay a
-/// subset of [tools] and must not invent names that are not listed here.
+/// **Source:** a real `GET /api/v1/chat/capabilities` response, captured
+/// 2026-08-13. This replaces the earlier partial snapshot, which was inferred
+/// from observed `POST /chat` payloads because the tunnel was unreachable at
+/// the time. The full contract is now pinned, so [JourneyStage.values] can be
+/// extended against it rather than against guesses.
+///
+/// `confirmingTools` is the set the backend flags `confirms: true` — the
+/// mutating steps that come back with `needsConfirmation` and must never be
+/// silently re-posted, since a duplicate "yes" is a double charge.
+///
+/// `toleratedAliases` holds spellings seen on the wire that the published
+/// list does not carry — `search_flight` (singular) appeared in 2026-08-07
+/// payloads. `JourneyStage` may accept those, but they are kept apart from
+/// `tools` so the published contract stays the source of truth and an alias
+/// is a deliberate choice rather than a typo nobody noticed.
 const chatCapabilitiesFixture = <String, Object?>{
-  'capturedFrom': 'journey_live_payloads_test.dart / POST /api/v1/chat',
-  'capturedAt': '2026-08-07',
-  'incomplete': true,
-  'note':
-      'Only tools seen on the wire are listed. Refresh from '
-      'GET /api/v1/chat/capabilities (expected ~25 tools, ~21 card types) '
-      'before adding more JourneyStage rows.',
+  'capturedFrom': 'GET /api/v1/chat/capabilities',
+  'capturedAt': '2026-08-13',
+  'incomplete': false,
   'tools': <String>[
     'search_flights',
-    'search_flight',
+    'select_flight',
     'list_extras',
+    'add_extras',
+    'remove_extras',
+    'view_basket',
+    'checkout',
+    'hold_fare',
+    'get_booking',
+    'show_seats',
+    'change_seat',
+    'check_in',
+    'boarding_pass',
+    'quote_upgrade',
+    'confirm_upgrade',
     'cancel_booking',
+    'get_wallet',
+    'get_profile',
+    'trip_context',
+    'check_documents',
+    'travel_history',
+    'spend_summary',
+    'interaction_history',
+    'brand_info',
+    'suggest_destinations',
+  ],
+  'confirmingTools': <String>[
+    'checkout',
+    'confirm_upgrade',
+    'cancel_booking',
+  ],
+  'toleratedAliases': <String>[
+    'search_flight',
   ],
   'cardTypes': <String>[
     'flight_list',
@@ -32,7 +66,15 @@ const chatCapabilitiesFixture = <String, Object?>{
     'boarding_pass',
     'upgrade_quote',
     'cancellation',
+    'wallet',
+    'trip_context',
+    'document_check',
+    'suggestion_list',
+    'member_profile',
     'travel_history',
     'spend_summary',
+    'interaction_history',
+    'brand_info',
+    'text',
   ],
 };

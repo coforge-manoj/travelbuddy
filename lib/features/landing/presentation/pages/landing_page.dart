@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:ai_travel_assistant/core/services/active_account_store.dart';
 import 'package:ai_travel_assistant/core/services/concierge_visibility_store.dart';
-import 'package:ai_travel_assistant/features/account/presentation/pages/account_list_page.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/routes/ai_travel_assistant_routes.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/presentation/pages/scenario_chat_page.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/presentation/widgets/concierge_moments_list.dart';
@@ -45,8 +44,6 @@ class LandingPage extends ConsumerWidget {
                           const SizedBox(height: 20),
                           _GreetingHeader(
                             name: ref.watch(activeAccountProvider).firstName,
-                            onTap: () => Navigator.of(context)
-                                .push(AccountListPage.route()),
                           ),
                           const SizedBox(height: 16),
                           const _VeloSkyPassCard(),
@@ -190,39 +187,21 @@ class _HeroIconButton extends StatelessWidget {
   }
 }
 
-/// The name doubles as the demo account switcher — tapping it opens the
-/// list of passengers the app can run as.
+/// Greets whichever demo member is signed in — the passenger is switched
+/// from the More tab, not from here.
 class _GreetingHeader extends StatelessWidget {
-  const _GreetingHeader({required this.name, required this.onTap});
+  const _GreetingHeader({required this.name});
 
   final String name;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Hi, $name',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.expand_more, size: 24, color: Colors.black54),
-            ],
+    return Text(
+      'Hi, $name',
+      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
           ),
-        ),
-      ),
     );
   }
 }

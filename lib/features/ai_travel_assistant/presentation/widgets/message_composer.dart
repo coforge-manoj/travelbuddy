@@ -107,7 +107,7 @@ class _MessageComposerState extends State<MessageComposer> {
                   prefixIcon: widget.onAudioModePressed == null
                       ? null
                       : IconButton(
-                          tooltip: 'Audio mode',
+                          tooltip: 'Voice mode',
                           onPressed: widget.enabled
                               ? widget.onAudioModePressed
                               : null,

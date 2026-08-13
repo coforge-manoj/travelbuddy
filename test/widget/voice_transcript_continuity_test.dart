@@ -40,8 +40,8 @@ class _FakeChatHistoryRepository implements ChatHistoryRepository {
 /// reseeds a welcome message on construction. If the voice page were ever
 /// pushed as a *replacement* rather than over a mounted `ChatPage`, the
 /// notifier would be torn down and rebuilt, and the passenger would come back
-/// to an empty chat with no error anywhere. Counting welcome messages is what
-/// detects that: a second one means the view model was rebuilt.
+/// to an empty chat with no error anywhere. Keeping the original welcome
+/// id is what detects that: a second seed would replace it.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -74,7 +74,8 @@ void main() {
       (tester) async {
     await pumpChat(tester);
 
-    final composer = tester.widget<MessageComposer>(find.byType(MessageComposer));
+    final composer =
+        tester.widget<MessageComposer>(find.byType(MessageComposer));
 
     // The new leading control.
     expect(composer.onAudioModePressed, isNotNull);
@@ -122,9 +123,7 @@ void main() {
     );
     final messagesBefore =
         chatState.ref.read(chatViewModelProvider).messages.toList();
-    final welcomeCountBefore = messagesBefore
-        .where((m) => m.text.contains('Hello'))
-        .length;
+    final welcomeId = messagesBefore.first.id;
 
     await tester.tap(find.byIcon(Icons.graphic_eq));
     await settle(tester);
@@ -142,9 +141,7 @@ void main() {
 
     // And nothing restarted: a second welcome message would mean the view model
     // was rebuilt and the conversation silently reset.
-    final welcomeCountAfter =
-        messagesAfter.where((m) => m.text.contains('Hello')).length;
-    expect(welcomeCountAfter, welcomeCountBefore);
+    expect(messagesAfter.where((m) => m.id == welcomeId), hasLength(1));
   });
 
   testWidgets('re-entering audio mode continues the same conversation',
@@ -180,6 +177,7 @@ void main() {
 
     final messages = chatState.ref.read(chatViewModelProvider).messages;
     expect(messages.map((m) => m.id), contains('typed-answer'));
-    expect(messages.where((m) => m.text.contains('Hello')).length, 1);
+    expect(messages.first.role, ChatRole.assistant);
+    expect(messages.where((m) => m.role == ChatRole.assistant), hasLength(2));
   });
 }

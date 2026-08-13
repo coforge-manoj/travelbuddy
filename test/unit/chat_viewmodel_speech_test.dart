@@ -169,7 +169,8 @@ void main() {
       );
 
   group('burst coalescing', () {
-    test('a reply plus its cards is spoken once, not once per message', () async {
+    test('a reply plus its cards is spoken once, not once per message',
+        () async {
       final viewModel = buildViewModel();
       addTearDown(viewModel.dispose);
       await pumpEventQueue();
@@ -201,13 +202,15 @@ void main() {
       // so the passenger heard the flight count twice — and the two word it
       // differently, so no string de-duplication removes it.
       viewModel.debugAppendMessages([
-        text('105 flights. Most recent was AA993 DFW→LHR in Flagship Business.'),
+        text(
+            '105 flights. Most recent was AA993 DFW→LHR in Flagship Business.'),
         ChatMessage(
           id: 'card',
           role: ChatRole.assistant,
           type: ChatMessageType.travelHistoryCard,
           timestamp: DateTime(2026),
-          text: '105 flights. Most recent was AA993 DFW→LHR in Flagship Business.',
+          text:
+              '105 flights. Most recent was AA993 DFW→LHR in Flagship Business.',
           spokenText: '105 flights all time, 193325 dollars in total. '
               'Most recently flight A A 993, D F W to L H R.',
         ),
@@ -273,7 +276,8 @@ void main() {
       expect(spoken, isNot(contains('Here it is')));
     });
 
-    test('replies separated by real work are spoken as separate turns', () async {
+    test('replies separated by real work are spoken as separate turns',
+        () async {
       final viewModel = buildViewModel();
       addTearDown(viewModel.dispose);
       await pumpEventQueue();
@@ -295,6 +299,23 @@ void main() {
       await pumpEventQueue();
 
       expect(voice.prepared, isEmpty);
+    });
+
+    test('turning voice output off mid-session silences later replies',
+        () async {
+      final viewModel = buildViewModel();
+      addTearDown(viewModel.dispose);
+      await pumpEventQueue();
+
+      viewModel.debugAppendMessages([text('Your gate is B twelve.')]);
+      await pumpEventQueue();
+      expect(voice.prepared, ['Your gate is B twelve.']);
+
+      viewModel.setVoiceOutputEnabled(false);
+      viewModel.debugAppendMessages([text('And the seat is 12A.')]);
+      await pumpEventQueue();
+
+      expect(voice.prepared, ['Your gate is B twelve.']);
     });
 
     test('cards are narrated on the device engine too', () async {
@@ -335,7 +356,8 @@ void main() {
       expect(voice.prepared, hasLength(1));
     });
 
-    test('a message carrying spokenText speaks that, not its on-screen text', () async {
+    test('a message carrying spokenText speaks that, not its on-screen text',
+        () async {
       final viewModel = buildViewModel();
       addTearDown(viewModel.dispose);
       await pumpEventQueue();
@@ -366,7 +388,8 @@ void main() {
       expect(voice.summarizeFlags.single, isTrue);
     });
 
-    test('a burst carrying card facts bypasses the summarizer entirely', () async {
+    test('a burst carrying card facts bypasses the summarizer entirely',
+        () async {
       final viewModel = buildViewModel();
       addTearDown(viewModel.dispose);
       await pumpEventQueue();
@@ -644,21 +667,95 @@ void main() {
       voice.gate!.complete();
     });
 
-    test('an utterance still being synthesized never reaches playback', () async {
+    test('acting mid-reply skips the follow-up queued behind it', () async {
       final viewModel = buildViewModel();
       addTearDown(viewModel.dispose);
       await pumpEventQueue();
 
-      viewModel.debugAppendMessages([text('A long answer about your booking.')]);
+      voice.gate = Completer<void>();
+
+      viewModel.debugAppendMessages([text('7 flights DFW to LHR.')]);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      viewModel.debugSpeakAside(
+        'You can say book the recommended one, or show me cheaper options.',
+      );
+
+      expect(voice.played, ['7 flights DFW to LHR.']);
+
+      // The passenger taps a flight (or sends a message) while the answer is
+      // still being read. stopSpeaking used to silence only the current clip,
+      // so the suggestion line started the moment it ended.
+      viewModel.stopSpeaking();
+      voice.gate!.complete();
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(
+        voice.played,
+        ['7 flights DFW to LHR.'],
+        reason: 'the queued suggestion must not play after the passenger acted',
+      );
+    });
+
+    test('an utterance still being synthesized never reaches playback',
+        () async {
+      final viewModel = buildViewModel();
+      addTearDown(viewModel.dispose);
+      await pumpEventQueue();
+
+      viewModel
+          .debugAppendMessages([text('A long answer about your booking.')]);
       // Interrupt in the same microtask window the flush was scheduled in, so
-      // the abort lands while preparation is still in flight. stopSpeaking()
-      // alone could not catch this — there is no audio to stop yet, and the
-      // clip would start playing seconds after the passenger interrupted.
+      // the abort lands while preparation is still in flight. There is no
+      // audio to stop yet; the epoch bump is what keeps the clip from
+      // starting seconds after the passenger interrupted.
       viewModel.abortSpeechQueue();
       await pumpEventQueue();
       await pumpEventQueue();
 
       expect(voice.played, isEmpty);
+    });
+  });
+
+  group('unspoken opening', () {
+    test('a fresh session offers the welcome until it is heard', () async {
+      final viewModel = buildViewModel();
+      addTearDown(viewModel.dispose);
+      await pumpEventQueue();
+
+      final welcome = viewModel.state.messages.single.text;
+      expect(welcome, contains('Elena'));
+      expect(viewModel.unspokenOpening, welcome);
+
+      viewModel.speakLine(welcome);
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(viewModel.lastSpokenLine, welcome);
+      expect(viewModel.unspokenOpening, isNull);
+      expect(voice.played, isNotEmpty);
+    });
+
+    test('a passenger turn means the opening has been overtaken', () async {
+      final viewModel = buildViewModel();
+      addTearDown(viewModel.dispose);
+      await pumpEventQueue();
+
+      expect(viewModel.unspokenOpening, isNotNull);
+
+      viewModel.debugAppendMessages([
+        ChatMessage(
+          id: 'user-hi',
+          role: ChatRole.user,
+          type: ChatMessageType.text,
+          timestamp: DateTime(2026),
+          text: 'book me a flight',
+        ),
+      ]);
+      await pumpEventQueue();
+
+      expect(viewModel.unspokenOpening, isNull);
     });
   });
 }

@@ -2,6 +2,7 @@
 
   import 'package:ai_travel_assistant/core/services/ai_services/ai_json_parser.dart';
   import 'package:ai_travel_assistant/core/services/ai_services/trip_discovery/trip_discovery_promt.dart';
+  import 'package:ai_travel_assistant/core/utils/app_date.dart';
   import 'package:flutter_dotenv/flutter_dotenv.dart';
   import 'package:http/http.dart' as http;
 
@@ -27,6 +28,12 @@ import '../../../../features/ai_travel_assistant/data/models/trip_discovery_mode
           {
             "role": "system",
             "content": TripDiscoveryPrompt.systemPrompt,
+          },
+          {
+            // "Is spring a good time to go?" is only answerable against a
+            // real calendar — without this the model picks a plausible year.
+            "role": "system",
+            "content": AppDate.promptContext,
           },
         ];
 

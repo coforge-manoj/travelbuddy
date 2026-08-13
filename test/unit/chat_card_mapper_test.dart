@@ -167,6 +167,46 @@ void main() {
       expect(catalogue.extras.last.included, isTrue);
     });
 
+    test('upgrade_quote is treated as awaiting approval even without the flag',
+        () {
+      // Postman: "Upgrade - upgrade to Business (expects needsConfirmation)".
+      // The live quote often omits the envelope flag; the card itself is the
+      // preview, same as a basket on "book it".
+      const quote = {
+        'reply': 'Main Cabin to Flagship Business is \$2439.',
+        'tool': 'quote_upgrade',
+        'cards': [
+          {
+            'type': 'upgrade_quote',
+            'from': 'Main Cabin',
+            'to': 'Flagship Business',
+            'difference': 2439,
+          },
+        ],
+        'needsConfirmation': false,
+        'suggestions': ['Check me in', 'Change my seat'],
+      };
+
+      expect(ChatCardMapper.requiresConfirmation(quote), isTrue);
+      expect(
+        ChatCardMapper.confirmationStageId(quote),
+        'quote_upgrade',
+      );
+    });
+
+    test('a flight list is not a confirmation, even with suggestions', () {
+      expect(
+        ChatCardMapper.requiresConfirmation({
+          'tool': 'search_flights',
+          'cards': [
+            {'type': 'flight_list', 'flights': <Object>[]},
+          ],
+          'needsConfirmation': false,
+        }),
+        isFalse,
+      );
+    });
+
     test('4. book — the basket preview arrives with needsConfirmation', () {
       // The confirmation itself is turn-level state, not part of the card;
       // the basket maps the same either way.

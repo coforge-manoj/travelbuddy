@@ -12,6 +12,7 @@ class DemoAccount {
     required this.fullName,
     required this.tier,
     required this.profile,
+    this.ownsSeededTrip = false,
   });
 
   final String memberNo;
@@ -22,6 +23,16 @@ class DemoAccount {
 
   /// One-line hint about what this account is good for demoing.
   final String profile;
+
+  /// Whether this member owns the seeded Bennett trip (the backend holds
+  /// exactly one, `/trips/1`).
+  ///
+  /// The trip endpoints are **not** scoped by `x-member-no` — asking for
+  /// `/trips/1/pending` as anyone returns the Bennett family's moments — so
+  /// without this flag the "Leo doesn't have a passport" warning fires in
+  /// every member's checkout, including passengers who have no children and
+  /// no trip to Japan. Observed on device before this existed.
+  final bool ownsSeededTrip;
 
   /// What the greeting and the concierge call the passenger.
   String get firstName => fullName.split(' ').first;
@@ -40,6 +51,7 @@ const demoAccounts = <DemoAccount>[
     fullName: 'Marcus Bennett',
     tier: 'Platinum Pro',
     profile: 'Family trip, documents, journey stages',
+    ownsSeededTrip: true,
   ),
   DemoAccount(
     memberNo: '7RM92QD',

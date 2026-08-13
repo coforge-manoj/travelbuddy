@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:ai_travel_assistant/core/utils/app_date.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_selection_sheet.dart';
@@ -28,7 +29,8 @@ class _FlightOffersCardState extends ConsumerState<FlightOffersCard> {
     if (_selectingOfferId != null) return;
 
     // The tap is the interaction, not the sheet's outcome — stop the reply
-    // being read out now rather than only if a cabin is actually picked.
+    // and its "you can say…" follow-up now, rather than only if a cabin is
+    // actually picked.
     ref.read(chatViewModelProvider.notifier).stopSpeaking();
 
     final choice = await showModalBottomSheet<FlightSelectionChoice>(
@@ -55,6 +57,12 @@ class _FlightOffersCardState extends ConsumerState<FlightOffersCard> {
     final routeLabel = widget.offers.isEmpty
         ? 'Flight options'
         : '${widget.offers.first.origin} → ${widget.offers.first.destination}';
+    // Only the rows' times are shown below, so without this a search for
+    // "tomorrow" gives the passenger no way to check which day was booked
+    // against — the whole point of resolving the relative date.
+    final dateLabel = widget.offers.isEmpty
+        ? null
+        : AppDate.format(widget.offers.first.departureTime);
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -82,6 +90,14 @@ class _FlightOffersCardState extends ConsumerState<FlightOffersCard> {
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                 ),
+                if (dateLabel != null)
+                  Text(
+                    dateLabel,
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: scheme.outline),
+                  ),
               ],
             ),
             const SizedBox(height: 10),

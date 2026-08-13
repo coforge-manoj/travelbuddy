@@ -234,6 +234,28 @@ void main() {
     });
   });
 
+  group('upgrade quote', () {
+    test('asks before applying, and names both prices', () {
+      final spoken = speak({
+        'type': 'upgrade_quote',
+        'from': 'Main Cabin',
+        'to': 'Flagship Business',
+        'difference': 2439,
+        'payWithMiles': {
+          'miles': 243900,
+          'affordable': true,
+        },
+        'flightNo': 'AA50',
+      })!;
+
+      expect(spoken, contains('Main Cabin'));
+      expect(spoken, contains('Flagship Business'));
+      expect(spoken, contains('2439 dollars'));
+      expect(spoken, contains('243900 miles'));
+      expect(spoken, contains('Shall I go ahead?'));
+    });
+  });
+
   group('cancellation', () {
     const cancellationCard = <String, Object?>{
       'type': 'cancellation',

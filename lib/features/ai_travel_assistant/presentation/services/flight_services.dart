@@ -1,6 +1,28 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'package:ai_travel_assistant/core/services/active_account_store.dart';
 
 import '../../../../core/services/api_services/api_service.dart';
+
+/// Fallbacks used when `.env` carries no TravelBuddy entry — a host app
+/// embedding this module without one still reaches a working backend, which
+/// is also what keeps the widget tests running with no `.env` loaded.
+///
+/// The tunnel URL changes whenever the tunnel restarts, so `.env` is the
+/// place to update it; this constant is only the last resort.
+const _fallbackBaseUrl = 'https://truly-wear-tray-assistance.trycloudflare.com';
+const _fallbackApiKey = 'njv+D1R/BdIz/U0BS7p1aN+6TodQI5hnKVZw3eThx4Y=';
+
+/// Reads [key] from `.env`, tolerating dotenv never having been loaded.
+///
+/// `dotenv.env` throws when `load()` was not called, and this service is
+/// built eagerly by the chat provider graph — the same reason
+/// [SpeechSummaryService] guards its reads this way.
+String _envOr(String key, String fallback) {
+  if (!dotenv.isInitialized) return fallback;
+  final value = dotenv.env[key];
+  return (value == null || value.isEmpty) ? fallback : value;
+}
 
 /// Talks to the TravelBuddy `/chat` endpoint — the single endpoint the whole
 /// conversational journey (search → select → extras → book → seat → check-in
@@ -21,21 +43,26 @@ class FlightServices {
             sessionId ?? 'tb-${DateTime.now().millisecondsSinceEpoch}',
         memberNo = memberNo ?? demoAccounts.first.memberNo;
 
-  final ApiService _apiService = ApiService(
-    // Tunnel URL — it changes whenever the tunnel restarts, so this is the
-    // one value to update, not a constant spread across the data layer.
-    baseUrl: 'https://truly-wear-tray-assistance.trycloudflare.com',
-  );
+  final ApiService _apiService =
+      ApiService(baseUrl: _envOr('TRAVELBUDDY_API_URL', _fallbackBaseUrl));
 
   final String sessionId;
   final String memberNo;
 
-  static const _apiKey = 'njv+D1R/BdIz/U0BS7p1aN+6TodQI5hnKVZw3eThx4Y=';
+  /// The base URL actually in use, so a presenter can confirm which backend
+  /// the app is pointed at without reading logs.
+  static String get resolvedBaseUrl =>
+      _envOr('TRAVELBUDDY_API_URL', _fallbackBaseUrl);
+
+  /// Shared with [ConciergeMomentsService], which talks to the same backend
+  /// on the trip endpoints rather than `/chat`.
+  static String get resolvedApiKey =>
+      _envOr('TRAVELBUDDY_API_KEY', _fallbackApiKey);
 
   Map<String, String> get _headers => {
         'x-member-no': memberNo,
         'x-session-id': sessionId,
-        'x-api-key': _apiKey,
+        'x-api-key': resolvedApiKey,
       };
 
   /// Sends what the passenger typed. [confirm] re-sends the same message as

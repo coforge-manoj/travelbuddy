@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
+import 'package:ai_travel_assistant/core/utils/app_date.dart';
 import 'package:ai_travel_assistant/core/utils/money_format.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/travel_history.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/card_shell.dart';
@@ -106,8 +106,7 @@ String? _lastFlown(TravelHistory history) {
   if (history.flights.isEmpty) return null;
   final raw = history.flights.first.date;
   if (raw.isEmpty) return null;
-  final parsed = DateTime.tryParse(raw);
-  return parsed != null ? DateFormat('d MMM yyyy').format(parsed) : raw;
+  return AppDate.formatRaw(raw);
 }
 
 class _HistoryRow extends StatelessWidget {
@@ -123,9 +122,7 @@ class _HistoryRow extends StatelessWidget {
 
     // Only reformat a date we can actually parse; anything else is shown
     // exactly as the backend sent it.
-    final parsed = DateTime.tryParse(flight.date);
-    final dateLabel =
-        parsed != null ? DateFormat('d MMM yyyy').format(parsed) : flight.date;
+    final dateLabel = AppDate.formatRaw(flight.date) ?? flight.date;
 
     final meta = <String>[
       if (flight.cabin.isNotEmpty) flight.cabin,

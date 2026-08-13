@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ai_travel_assistant/core/services/concierge_visibility_store.dart';
 import 'package:ai_travel_assistant/core/services/local_notification_service.dart';
 import 'package:ai_travel_assistant/core/services/reminder_delay_store.dart';
+import 'package:ai_travel_assistant/core/services/tts_engine_setting_store.dart';
 import 'package:ai_travel_assistant/core/services/voice_output_setting_store.dart';
 
 /// The push-notification copy for the one scripted scenario that otherwise
@@ -31,6 +32,8 @@ class MorePage extends ConsumerWidget {
     final selectedSeconds = ref.watch(reminderDelayStoreProvider);
     final conciergeVisible = ref.watch(conciergeVisibilityStoreProvider);
     final voiceOutputEnabled = ref.watch(voiceOutputEnabledProvider);
+    final ttsEngine = ref.watch(ttsEngineProvider);
+    final speechSummaryEnabled = ref.watch(speechSummaryEnabledProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -62,6 +65,33 @@ class MorePage extends ConsumerWidget {
             value: voiceOutputEnabled,
             onChanged: (value) => ref.read(voiceOutputEnabledProvider.notifier).setEnabled(value),
           ),
+          if (voiceOutputEnabled) ...[
+            const SizedBox(height: 24),
+            const _SectionHeader(
+              title: 'Voice engine',
+              subtitle: 'Which engine reads replies aloud.',
+            ),
+            for (final engine in TtsEngine.values) ...[
+              _TtsEngineOptionTile(
+                engine: engine,
+                selected: engine == ttsEngine,
+                onTap: () => ref.read(ttsEngineProvider.notifier).setEngine(engine),
+              ),
+              const SizedBox(height: 10),
+            ],
+            const SizedBox(height: 14),
+            const _SectionHeader(
+              title: 'Summarize before speaking',
+              subtitle: 'Condense replies into a short spoken line instead of '
+                  'reading the whole message out.',
+            ),
+            _SettingSwitchTile(
+              label: speechSummaryEnabled ? 'Summarize for audio' : 'Read verbatim',
+              value: speechSummaryEnabled,
+              onChanged: (value) =>
+                  ref.read(speechSummaryEnabledProvider.notifier).setEnabled(value),
+            ),
+          ],
           const SizedBox(height: 24),
           const _SectionHeader(
             title: 'Concierge reminder delay',
@@ -152,6 +182,73 @@ class _SettingSwitchTile extends StatelessWidget {
               onChanged: onChanged,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Engine picker row — shows the trade-off inline, since "needs a connection"
+/// is the thing a passenger would otherwise only discover by hearing nothing.
+class _TtsEngineOptionTile extends StatelessWidget {
+  const _TtsEngineOptionTile({
+    required this.engine,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final TtsEngine engine;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? MorePage._brandBlue : Colors.grey.shade300,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      engine.label,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: selected ? MorePage._brandBlue : Colors.black87,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      engine.description,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 12),
+                const Icon(Icons.check_circle, color: MorePage._brandBlue, size: 20),
+              ],
+            ],
+          ),
         ),
       ),
     );

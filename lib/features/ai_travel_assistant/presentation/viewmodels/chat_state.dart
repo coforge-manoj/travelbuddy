@@ -14,6 +14,25 @@ enum ChatStatus {
   error,
 }
 
+/// Where the assistant's voice is up to, for a turn as a whole.
+///
+/// Deliberately not part of [ChatState]: this is a sequence of events, and a
+/// listener that reopens the microphone on [settled] must react to each one.
+/// Folded into the state it would be a value that can be missed — two turns
+/// settling back to back would look like no change at all.
+enum SpeechActivity {
+  /// An utterance is queued or being synthesized. Nothing is audible yet.
+  preparing,
+
+  /// Audio is playing.
+  playing,
+
+  /// Nothing is playing and nothing is queued — the turn has finished
+  /// speaking. Also emitted when a turn produced no speech at all, so a
+  /// listener waiting on it is never left hanging.
+  settled,
+}
+
 class ChatState extends Equatable {
   const ChatState({
     this.messages = const [],

@@ -22,6 +22,7 @@ dependencies:
 
   # Networking
   dio: ^5.4.3
+  http: ^1.2.0
 
   # JSON / immutable models
   freezed_annotation: ^2.4.1
@@ -35,6 +36,10 @@ dependencies:
   # Voice
   speech_to_text: ^7.4.0
   flutter_tts: ^4.0.2
+
+  # Cartesia neural TTS: HTTP /tts/bytes → mp3, played via audioplayers.
+  audioplayers: ^6.1.0
+  path_provider: ^2.1.4
 
   # Local notifications
   flutter_local_notifications: ^17.2.3

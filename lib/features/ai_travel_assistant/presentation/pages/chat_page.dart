@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/pages/voice_conversation_page.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_state.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/chat_bubble.dart';
@@ -149,6 +150,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 viewModel.startVoiceInput();
               }
             },
+            // Pushed, never `pushReplacement`. `chatViewModelProvider` is
+            // autoDispose and `_startNewSession` clears history on
+            // construction, so replacing this page would tear the notifier
+            // down and silently wipe the conversation the passenger is in the
+            // middle of. Pushing keeps this page mounted and its `ref.watch`
+            // alive, which is what makes the transcript complete the moment
+            // audio mode is closed, and what lets re-entering it continue the
+            // same conversation on the same backend session.
+            onAudioModePressed: () => Navigator.of(context).push(
+              VoiceConversationPage.route(),
+            ),
           ),
         ],
       ),

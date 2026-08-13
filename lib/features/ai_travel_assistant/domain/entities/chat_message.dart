@@ -42,6 +42,7 @@ class ChatMessage extends Equatable {
     this.text = '',
     this.payload,
     this.isStreaming = false,
+    this.spokenText,
   });
 
   final String id;
@@ -60,10 +61,23 @@ class ChatMessage extends Equatable {
 
   final bool isStreaming;
 
+  /// What was actually said aloud for this message, when that differs from
+  /// [text].
+  ///
+  /// A card's [text] is only a caption — the substance lives in [payload] and
+  /// gets described by `CardSpeechTextBuilder`, and a spoken line is also
+  /// summarized for the ear, so it is usually shorter and worded differently
+  /// from what is on screen. Keeping it here means the transcript can show what
+  /// the passenger heard rather than a bubble that silently disagrees with it.
+  ///
+  /// `null` when nothing was spoken, or when the spoken words were just [text].
+  final String? spokenText;
+
   ChatMessage copyWith({
     String? text,
     Object? payload,
     bool? isStreaming,
+    String? spokenText,
   }) {
     return ChatMessage(
       id: id,
@@ -73,9 +87,11 @@ class ChatMessage extends Equatable {
       text: text ?? this.text,
       payload: payload ?? this.payload,
       isStreaming: isStreaming ?? this.isStreaming,
+      spokenText: spokenText ?? this.spokenText,
     );
   }
 
   @override
-  List<Object?> get props => [id, role, type, timestamp, text, payload, isStreaming];
+  List<Object?> get props =>
+      [id, role, type, timestamp, text, payload, isStreaming, spokenText];
 }

@@ -267,8 +267,11 @@ class ChatViewModel extends StateNotifier<ChatState> {
   /// Entry point for the composer and suggested-prompt chips.
   Future<void> sendMessage(String text) async {
     final trimmed = text.trim();
+
     if (trimmed.isEmpty) return;
+
     stopSpeaking();
+
     if (state.isBusy) return;
 
     _appendMessage(
@@ -280,63 +283,70 @@ class ChatViewModel extends StateNotifier<ChatState> {
         text: trimmed,
       ),
     );
-    // Read before the reset below: this message is the answer to whatever
-    // the backend last asked for.
+
+    // Read this BEFORE resetting it.
+    // This tells us whether the backend was still waiting
+    // for search details like origin/destination/date.
     final continuesSearch = state.awaitingSearchDetails;
 
     state = state.copyWith(
       status: ChatStatus.sendingMessage,
       clearError: true,
       suggestions: const [],
-      // Whatever the passenger typed supersedes a confirmation they were
-      // asked for and did not answer — including a plain "yes", which the
-      // backend accepts as the approval in its own right.
+
       clearPendingConfirmation: true,
-      // Cleared up front so it cannot go stale on a turn that never reaches
-      // the backend (escalation, a plain AI reply); the next `/chat`
-      // response sets it again from the wire.
+
       awaitingSearchDetails: false,
     );
 
-    // If a conversation is already active, first check whether
-// the user is continuing it or switching topics.
-    if (state.activeIntent != null) {
-      // Once a journey is under way, TravelBuddy `/chat` sessions (search →
-      // select → extras → book) must keep posting follow-ups to the same
-      // endpoint verbatim — including suggestion taps like "take the
-      // cheapest one" and the plain "yes" that approves a payment. Routing
-      // those through the conversation router would re-classify and reword
-      // them, and the backend would lose the thread.
-      //
-      // The exception is a search the backend is still assembling: it has
-      // asked for an origin, destination or date, and this message carries
-      // one of them. That has to be merged into the search rather than sent
-      // on its own, so it goes down the router path below.
-      if (state.activeIntent != IntentType.tripDiscovery && !continuesSearch) {
-        await _handleTravelBuddyChat(
-          userMessage: trimmed,
-          apiMessage: trimmed,
-        );
-        state = state.copyWith(status: ChatStatus.idle);
-        return;
-      }
+    // ============================================================
+    // ACTIVE CONVERSATION
+    // ============================================================
 
+    if (state.activeIntent != null) {
       final lastAssistantMessage = state.messages
           .lastWhere(
             (e) => e.role == ChatRole.assistant,
-          )
+      )
           .text;
 
-      final routerResult = await ConversationRouterService.instance.route(
+      print("===== ROUTER INPUT =====");
+      print({
+        "currentIntent": state.activeIntent!.name,
+        "currentContext": state.conversationContext.toJson(),
+        "previousAssistantMessage": lastAssistantMessage,
+        "latestUserMessage": trimmed,
+      });
+
+      final routerResult =
+      await ConversationRouterService.instance.route(
         activeIntent: state.activeIntent!,
         assistantMessage: lastAssistantMessage,
         userMessage: trimmed,
         context: state.conversationContext.toJson(),
       );
 
+      print("===== ROUTER DECISION =====");
+      print({
+        "continueConversation":
+        routerResult.continueConversation,
+        "requiresReclassification":
+        routerResult.requiresReclassification,
+        "normalizedPrompt":
+        routerResult.normalizedPrompt,
+        "updatedContext":
+        routerResult.updatedContext,
+      });
+
+      // ==========================================================
+      // CASE 1:
+      // SAME INTENT / SAME CONVERSATION
+      // ==========================================================
+
       if (routerResult.continueConversation) {
         state = state.copyWith(
-          conversationContext: state.conversationContext.copyWith(
+          conversationContext:
+          state.conversationContext.copyWith(
             data: routerResult.updatedContext,
           ),
         );
@@ -352,21 +362,67 @@ class ChatViewModel extends StateNotifier<ChatState> {
         return;
       }
 
-      // User changed topic.
-      state = state.copyWith(
-        clearActiveIntent: true,
-      );
+      // ==========================================================
+      // CASE 2:
+      // USER CHANGED TOPIC / INTENT
+      // ==========================================================
+
+      if (routerResult.requiresReclassification) {
+        print(
+          "🔄 Topic changed. Clearing active intent: "
+              "${state.activeIntent!.name}",
+        );
+
+        state = state.copyWith(
+          clearActiveIntent: true,
+          conversationContext: ConversationContext(),
+        );
+      }
     }
 
-// Normal intent classification
-    final intentResult = await _classifyIntentUseCase(trimmed);
+    // ============================================================
+    // NORMAL INTENT CLASSIFICATION
+    // ============================================================
+    //
+    // This is reached when:
+    //
+    // 1. There was no active intent
+    // OR
+    // 2. Router detected an intent/topic switch.
+    //
+    // Example:
+    //
+    // activeIntent = searchFlights
+    // user = "I want a trip to Australia"
+    //
+    // Router:
+    //   continueConversation = false
+    //   requiresReclassification = true
+    //
+    // Then classifier receives:
+    //   "I want a trip to Australia"
+    //
+    // and can classify it as tripDiscovery.
+    // ============================================================
+
+    final intentResult =
+    await _classifyIntentUseCase(trimmed);
 
     await intentResult.fold(
-      (failure) async => _appendError(failure.message),
-      (intent) async => _handleIntent(intent, trimmed),
+          (failure) async {
+        _appendError(failure.message);
+      },
+          (intent) async {
+        await _handleIntent(
+          intent,
+          trimmed,
+        );
+      },
     );
 
-    state = state.copyWith(status: ChatStatus.idle);
+    state = state.copyWith(
+      status: ChatStatus.idle,
+    );
   }
 
   /// Looks for a [ProactiveScenario] whose opening line the free-typed
@@ -558,7 +614,7 @@ class ChatViewModel extends StateNotifier<ChatState> {
         );
 
         await _handleTripDiscovery(
-          intent.originalMessage,
+          intent.qnPromt,
         );
         break;
 
@@ -603,85 +659,57 @@ class ChatViewModel extends StateNotifier<ChatState> {
   }
 
   Future<void> _handleTripDiscovery(String userMessage) async {
-    // try {
-//       final result = await TripDiscoveryService.instance.discover(
-//         userMessage: userMessage,
-//         context: state.conversationContext.toJson(),
-//       );
-//
-//       state = state.copyWith(
-//         conversationContext: ConversationContext.fromJson(
-//           result.tripContext.toJson(),
-//         ),
-//       );
-//       print("Trip Context");
-//       print(result.tripContext.toJson());
-//       // Summary
-//       if (result.summary.isNotEmpty) {
-//         _appendMessage(
-//           ChatMessage(
-//             id: _uuid.v4(),
-//             role: ChatRole.assistant,
-//             type: ChatMessageType.text,
-//             timestamp: DateTime.now(),
-//             text: result.summary,
-//           ),
-//         );
-//       }
-//
-//       // Recommendations
-//       if (result.recommendations.isNotEmpty) {
-//         final recommendationText = result.recommendations
-//             .map(
-//               (e) => '''
-// 📍 ${e.destination}, ${e.country}
-//
-// 💡 ${e.reason}
-//
-// 📅 Best Time: ${e.bestTime}
-//
-// 💰 Budget: ${e.estimatedBudget}
-//
-// 🗓 Duration: ${e.idealDuration}
-// ''',
-//             )
-//             .join('\n------------------------------\n');
-//
-//         _appendMessage(
-//           ChatMessage(
-//             id: _uuid.v4(),
-//             role: ChatRole.assistant,
-//             type: ChatMessageType.text,
-//             timestamp: DateTime.now(),
-//             text: recommendationText,
-//           ),
-//         );
-//       }
-//
-//       // Follow-up question
-//       if (result.followUpQuestion.isNotEmpty) {
-//         _appendMessage(
-//           ChatMessage(
-//             id: _uuid.v4(),
-//             role: ChatRole.assistant,
-//             type: ChatMessageType.text,
-//             timestamp: DateTime.now(),
-//             text: result.followUpQuestion,
-//           ),
-//         );
-//       }
-//     } catch (e) {
-//       _appendMessage(
-//         ChatMessage(
-//           id: _uuid.v4(),
-//           role: ChatRole.assistant,
-//           type: ChatMessageType.text,
-//           timestamp: DateTime.now(),
-//           text: "Sorry, something went wrong while discovering trips.",
-//         ),
-//       );
-//     }
+    try {
+      final result = await TripDiscoveryService.instance.discover(
+        userMessage: userMessage,
+        context: state.conversationContext.toJson(),
+      );
+
+      final backendData = <String, dynamic>{
+        'reply': result.answer,
+        'answer': result.answer,
+        'suggestions': result.suggestions,
+      };
+
+      final humanized =
+      await ResponseHumanizerService.instance.humanize(
+        userMessage: userMessage,
+        backendResponse: backendData,
+        suggestions: result.suggestions,
+        intent: 'tripDiscovery',
+      );
+
+      final displayText = humanized.message.trim().isNotEmpty
+          ? humanized.message
+          : result.answer;
+
+      state = state.copyWith(
+        suggestions: result.suggestions,
+      );
+
+      if (displayText.trim().isNotEmpty) {
+        _appendMessage(
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatRole.assistant,
+            type: ChatMessageType.text,
+            timestamp: DateTime.now(),
+            text: displayText,
+          ),
+          speakAs: displayText,
+        );
+      }
+    } catch (e, stackTrace) {
+      print("========== Trip Discovery Error ==========");
+      print(e);
+      print(stackTrace);
+
+      _appendError(
+        'Sorry, something went wrong while discovering trips.',
+      );
+    }
   }
+
 
   Future<void> _handleOthersRequest(IntentResult intent) async {
     final apiMessage = intent.qnPromt.trim().isNotEmpty

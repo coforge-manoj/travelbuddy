@@ -21,6 +21,7 @@ class ResponseHumanizerService {
     required String userMessage,
     required Map<String, dynamic> backendResponse,
     List<String>? suggestions,
+    String? intent,
   }) async {
     try {
       final response = await http.post(
@@ -45,6 +46,7 @@ class ResponseHumanizerService {
                 backendResponse['reply']?.toString() ?? '',
                 "suggestions": suggestions ?? [],
               }),
+              "Intent": intent
             }
           ]
         }),

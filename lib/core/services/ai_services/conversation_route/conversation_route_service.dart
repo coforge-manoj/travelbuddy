@@ -34,29 +34,25 @@ class ConversationRouterService {
           "content": ConversationRouterPrompt.systemPrompt,
         },
         {
-          "role": "system",
-          "content":
-          "Current Active Intent:\n${activeIntent.name}",
+          "role": "user",
+          "content": jsonEncode({
+            "currentIntent": activeIntent.name,
+            "currentContext": context,
+            "previousAssistantMessage": assistantMessage,
+            "latestUserMessage": userMessage,
+          }),
         },
       ];
 
-      if (context.isNotEmpty) {
-        messages.add({
-          "role": "system",
-          "content":
-          "Current Context:\n${jsonEncode(context)}",
-        });
-      }
-
-      messages.add({
-        "role": "assistant",
-        "content": assistantMessage,
-      });
-
-      messages.add({
-        "role": "user",
-        "content": userMessage,
-      });
+      print("===== ROUTER INPUT =====");
+      print(
+        const JsonEncoder.withIndent('  ').convert({
+          "currentIntent": activeIntent.name,
+          "currentContext": context,
+          "previousAssistantMessage": assistantMessage,
+          "latestUserMessage": userMessage,
+        }),
+      );
 
       final response = await http.post(
         Uri.parse(_apiUrl),
@@ -79,18 +75,20 @@ class ConversationRouterService {
       jsonDecode(response.body) as Map<String, dynamic>;
 
       final content =
-      body["choices"][0]["message"]["content"]
-          .toString();
+      body["choices"][0]["message"]["content"].toString();
 
       print("=== ROUTER RESPONSE ===");
       print(content);
 
       final json = AiJsonParser.parseObject(content);
+
       print("ROUTER PARSED");
+
       return ConversationRouterResult.fromJson(json);
-    } catch (e) {
+    } catch (e, stackTrace) {
       print("ConversationRouterService Error");
       print(e);
+      print(stackTrace);
 
       return const ConversationRouterResult(
         continueConversation: false,

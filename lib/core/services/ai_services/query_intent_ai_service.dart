@@ -294,6 +294,35 @@ flights from XXX to YYY
 when action == bookFlight.
 
 ==========================
+TRIP DISCOVERY QNPROMPT RULE
+==========================
+
+If action == "tripDiscovery":
+
+- qnPrompt MUST contain the user's complete original message.
+- Preserve the user's exact wording.
+- Do NOT summarize, rewrite, normalize, translate, or modify it.
+- Do NOT generate a flight-search prompt.
+- qnPrompt must be exactly the same as the user's input message.
+
+Example:
+
+Input:
+Best time for our family of 4 to visit Tokyo in spring?
+
+Output:
+{
+  "action": "tripDiscovery",
+  "confidence": 0.99,
+  "entities": {
+    "destination": "Tokyo",
+    "travellers": "4",
+    "season": "spring"
+  },
+  "qnPrompt": "Best time for our family of 4 to visit Tokyo in spring?"
+}
+
+==========================
 QNPROMPT GENERATION RULES
 ==========================
 

@@ -17,7 +17,7 @@ class FlightServices {
   final ApiService _apiService = ApiService(
     // Tunnel URL — it changes whenever the tunnel restarts, so this is the
     // one value to update, not a constant spread across the data layer.
-    baseUrl: 'https://flying-rug-probably-deemed.trycloudflare.com',
+    baseUrl: 'https://truly-wear-tray-assistance.trycloudflare.com',
   );
 
   final String sessionId;

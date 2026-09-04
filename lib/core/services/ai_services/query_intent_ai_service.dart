@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../features/ai_travel_assistant/domain/entities/intent.dart';
+import '../../utils/app_date.dart';
 
 class QueryUnderstandingService {
   QueryUnderstandingService._();
@@ -14,13 +15,35 @@ class QueryUnderstandingService {
   final String _apiKey = dotenv.env['API_KEY'] ?? '';
   final String _model = dotenv.env['MODEL_NAME'] ?? 'gemini-2-5-flash';
 
+  /// Ceiling on the classification round trip.
+  ///
+  /// This call had no bound at all, and a hung request took the whole turn with
+  /// it: nothing downstream runs until an intent comes back, so the passenger
+  /// heard the acknowledgement and then silence — no answer, no error, and the
+  /// microphone reopening as if the turn had been dealt with. Captured on a
+  /// device: a booking request at 17:20:00 never produced an `INTENT RESPONSE`
+  /// line at all.
+  ///
+  /// Generous, because the prompt is long and a slow-but-working
+  /// classification is better than none: the fallback posts the raw message to
+  /// the backend, which routes it but without the entities and `qnPrompt` this
+  /// call extracts. 10s was expiring on real traffic — a booking request timed
+  /// out at exactly 10.000s while the router was merely slow, not stuck.
+  ///
+  /// Expiring is safe rather than silent: the `catch` below flags
+  /// [IntentResult.classifierFailed], and `ChatViewModel._handleIntent` posts
+  /// the message straight to TravelBuddy `/chat` instead of guessing at it.
+  /// The cost of the longer budget is that a genuinely stuck router now holds
+  /// the turn for twenty seconds before that fallback runs.
+  static const _classifyBudget = Duration(seconds: 20);
+
   Future<IntentResult> summarizeInput(String input) async {
     try {
       if (input.trim().isEmpty) {
         return  IntentResult(
-          type: IntentType.unknown,
-          confidence: 0.0,
-          originalMessage: input
+            type: IntentType.unknown,
+            confidence: 0.0,
+            originalMessage: input
         );
       }
 
@@ -74,6 +97,7 @@ inflightAssistance
 arrivalAssistance
 baggageTracking
 tripManagement
+wallet
 unknown
 
 
@@ -84,6 +108,65 @@ Intent Definitions:
   show or search available flights between locations.
   Includes flight options, schedules, departures,
   arrivals and available routes.
+
+  A wish to BOOK, or a request for HELP booking, is also searchFlights
+  whenever no specific flight has been chosen yet. A flight has to be found
+  before it can be booked, so "book a flight" and "search for a flight" are
+  the same request at this stage.
+
+  Examples, all searchFlights:
+
+  book a flight
+  I want to book a flight
+  I need to book a flight
+  help me book a flight
+  help me with booking a flight
+  can you help me with booking a flight
+  can you help me with booking of flight
+  search for a flight
+  find me a flight
+  I want to fly somewhere
+
+  Confidence for these is HIGH — 0.9 or above — even when origin,
+  destination and date are ALL missing. Missing details are not a reason to
+  lower confidence: the intent is certain, only the parameters are absent.
+  Low confidence makes the assistant offer a human agent, which is the wrong
+  answer to a clear request to book a flight.
+
+  When origin or destination is missing, return an empty qnPrompt. The
+  assistant asks for the missing details itself.
+
+
+
+- bookFlight:
+  User wants to book, reserve, confirm or purchase
+  a specific flight.
+
+  This intent should be selected only when the
+  user has already chosen a particular flight,
+  OR a flight number is available,
+  OR the conversation context contains a selected flight.
+
+  Examples:
+
+  book AA2556
+
+  yes book it
+
+  confirm booking
+
+  reserve this flight
+
+  proceed with booking
+
+  yes book now
+
+  book the recommended flight
+
+  confirm AA2556
+
+  purchase this ticket
+
 
 - flightStatus:
   Flight status, delay, cancellation, departure status,
@@ -134,7 +217,16 @@ Intent Definitions:
   best time to travel,
   family trip planning,
   trip costs,
-  reward points usage.
+  whether points could cover a trip they are still planning.
+  NOT their own balance - see wallet.
+
+- wallet:
+  User is asking what THEY currently hold:
+  how many miles or points they have,
+  their voucher, their card on file,
+  their tier or loyalty status balance.
+  This is a lookup of their own account,
+  not an exploration of a trip.
 
 - tripRecommendation:
   Fare alerts,
@@ -218,20 +310,197 @@ Rules:
 8. No explanation.
 9. For searchFlights always generate qnPrompt.
 
-Format:
+BOOKING RULES
 
-If source and destination available:
-"flights from {source} to {destination}"
+bookFlight applies ONLY when a particular flight is already identified —
+a flight number in the message, or a flight chosen earlier in the
+conversation. A general wish to book with no flight picked out is
+searchFlights, not bookFlight.
 
-If date is available:
-"flights from {source} to {destination} on {yyyy-MM-dd}"
+  book AA2556            -> bookFlight  (a flight is named)
+  yes book it            -> bookFlight  (a flight was chosen already)
+  book a flight          -> searchFlights (nothing chosen yet)
+  help me book a flight  -> searchFlights (nothing chosen yet)
 
-Use airport codes when confidently known:
+If the user's message indicates they want to confirm or proceed with
+booking a specific flight, classify it as:
+
+action = "bookFlight"
+
+Examples include:
+
+- book
+- book now
+- yes
+- yes please
+- proceed
+- proceed with booking
+- reserve it
+- confirm booking
+- purchase ticket
+- book AA2556
+- book the recommended flight
+- confirm AA2556
+
+If a flightNumber is available in the message
+or conversation context:
+
+entities:
+
+{
+   "flightNumber":"AA2556"
+}
+
+Generate:
+
+"qnPrompt":"book it"
+
+Never generate a flight search prompt.
+
+Never use:
+
+flights from XXX to YYY
+
+when action == bookFlight.
+
+==========================
+TRIP DISCOVERY QNPROMPT RULE
+==========================
+
+If action == "tripDiscovery":
+
+- qnPrompt MUST contain the user's complete original message.
+- Preserve the user's exact wording.
+- Do NOT summarize, rewrite, normalize, translate, or modify it.
+- Do NOT generate a flight-search prompt.
+- qnPrompt must be exactly the same as the user's input message.
+
+Example:
+
+Input:
+Best time for our family of 4 to visit Tokyo in spring?
+
+Output:
+{
+  "action": "tripDiscovery",
+  "confidence": 0.99,
+  "entities": {
+    "destination": "Tokyo",
+    "travellers": "4",
+    "season": "spring"
+  },
+  "qnPrompt": "Best time for our family of 4 to visit Tokyo in spring?"
+}
+
+==========================
+QNPROMPT GENERATION RULES
+==========================
+
+The qnPrompt is used by the flight search API.
+
+Always generate qnPrompt in one of these formats:
+
+Without date:
+"flights from {origin} to {destination}"
+
+With date:
+"flights from {origin} to {destination} on {yyyy-MM-dd}"
+
+LOCATION NORMALIZATION
+
+Whenever possible, convert locations to their official IATA airport codes.
+
+Priority:
+1. Airport name
+2. Airport code
+3. City
+4. Otherwise keep original text
+
+If the user explicitly mentions an airport, convert it to its IATA code.
+Examples:
+London Heathrow Airport -> LHR
+John F. Kennedy Airport -> JFK
+Indira Gandhi International Airport -> DEL
+Chhatrapati Shivaji Airport -> BOM
+Kempegowda Airport -> BLR
+Dubai International Airport -> DXB
+Singapore Changi Airport -> SIN
+
+If the user already provides an IATA airport code, preserve it exactly.
+
+If the user provides only a city and the city has one commonly accepted primary airport, replace the city with its IATA airport code.
+Examples:
+Delhi -> DEL
+Mumbai -> BOM
+Bengaluru/Bangalore -> BLR
+Chennai -> MAA
+Hyderabad -> HYD
+Kolkata -> CCU
+Pune -> PNQ
+Ahmedabad -> AMD
+Dubai -> DXB
+Abu Dhabi -> AUH
+Doha -> DOH
+Singapore -> SIN
+Bangkok -> BKK
+Paris -> CDG
+Frankfurt -> FRA
+Amsterdam -> AMS
+Los Angeles -> LAX
+San Francisco -> SFO
+San Diego -> SAN
+Seattle -> SEA
+Chicago -> ORD
 Dallas -> DFW
-London Heathrow -> LHR
-New York JFK -> JFK
+Atlanta -> ATL
+Miami -> MIA
+Sydney -> SYD
+Melbourne -> MEL
+London -> LHR
+California -> LAX
+Texas -> DFW
+Florida -> MIA
+Japan -> HND
+India -> DEL
+England -> LHR
+Paris -> CDG
+New York -> JFK
 
-If source or destination is missing, keep qnPrompt empty.
+Never guess when a city has multiple major airports.
+Keep the original city name.
+Examples:
+London
+New York
+Milan
+Moscow
+Berlin
+
+Never convert states, regions or countries into airport codes.
+Examples:
+California
+Texas
+England
+India
+Japan
+Europe
+
+Flights from London to California
+-> flights from London to California
+
+If a location cannot confidently be mapped, keep the original text.
+
+If either source or destination is missing, keep qnPrompt empty.
+
+If a date exists, append: on yyyy-MM-dd.
+
+A relative date such as "today", "tomorrow", "this weekend" or "next Friday"
+counts as a date. Resolve it against CURRENT DATE CONTEXT and append the
+resolved yyyy-MM-dd — never pass the relative wording through, and never
+treat the date as missing. Put the same resolved value in entities.date.
+
+Never invent airport codes.
+Never guess between multiple airports.
+Only use airport codes when the mapping is confident.
 
 Examples:
 
@@ -433,6 +702,50 @@ Output:
 }
 
 Input:
+
+book flight AA2556 from DEL to MIA on 2026-08-25
+
+Output:
+
+{
+  "action":"bookFlight",
+  "confidence":0.99,
+  "entities":{
+      "flightNumber":"AA2556",
+      "source":"DEL",
+      "destination":"MIA",
+      "date":"2026-08-25"
+  },
+  "qnPrompt":"book it"
+}
+Input:
+
+Book AA2556
+
+Output:
+
+{
+  "action":"bookFlight",
+  "confidence":0.99,
+  "entities":{
+      "flightNumber":"AA2556"
+  },
+  "qnPrompt":"book it"
+}
+Input:
+
+Yes, book now.
+
+Output:
+
+{
+  "action":"bookFlight",
+  "confidence":0.98,
+  "entities":{},
+  "qnPrompt":"book it"
+}
+
+Input:
 What entertainment options are available for kids onboard?
 
 Output:
@@ -507,6 +820,63 @@ Output:
 }
 
 Input:
+Can you help me with booking a flight
+
+Output:
+{
+  "action":"searchFlights",
+  "confidence":0.95,
+  "entities":{},
+  "qnPrompt":""
+}
+
+Input:
+Help me with booking a flight
+
+Output:
+{
+  "action":"searchFlights",
+  "confidence":0.95,
+  "entities":{},
+  "qnPrompt":""
+}
+
+Input:
+I want to book a flight
+
+Output:
+{
+  "action":"searchFlights",
+  "confidence":0.95,
+  "entities":{},
+  "qnPrompt":""
+}
+
+Input:
+Search for a flight
+
+Output:
+{
+  "action":"searchFlights",
+  "confidence":0.95,
+  "entities":{},
+  "qnPrompt":""
+}
+
+Input:
+Book a flight to London
+
+Output:
+{
+  "action":"searchFlights",
+  "confidence":0.94,
+  "entities":{
+    "destination":"LHR"
+  },
+  "qnPrompt":""
+}
+
+Input:
 Show available flights from Dallas to London on June 10 2027
 
 Output:
@@ -528,9 +898,10 @@ Output:
   "action":"searchFlights",
   "confidence":0.99,
   "entities":{
-    "source":"Delhi",
-    "destination":"Mumbai"
-  }
+    "source":"DEL",
+    "destination":"BOM"
+  },
+  "qnPrompt":"flights from DEL to BOM"
 }
 
 Input:
@@ -629,17 +1000,27 @@ Output:
 
 Important Classification Priority:
 
-1. If user is exploring a trip, destination, travel ideas, costs or points -> tripDiscovery
-2. If user is asking for passport, visa, immigration or eligibility -> travelDocuments
-3. If user is asking for layover quality, connection risks or itinerary improvements -> itineraryOptimization
-4. If user is asking for packing, destination weather, local culture or etiquette -> destinationGuidance
-5. If user is asking for airport facilities such as restaurants, lounges, play areas or shopping -> airportAmenities
-6. If user is asking about customs, immigration, meeting points or arriving at destination -> arrivalAssistance
-7. If user mentions a specific flight and asks status -> flightStatus
-8. If user wants to find available flights -> searchFlights
+1. If user asks what they themselves hold - their miles/points balance, voucher, card or tier -> wallet
+2. If user is exploring a trip, destination, travel ideas, costs, or whether points could pay for a trip -> tripDiscovery
+3. If user is asking for passport, visa, immigration or eligibility -> travelDocuments
+4. If user is asking for layover quality, connection risks or itinerary improvements -> itineraryOptimization
+5. If user is asking for packing, destination weather, local culture or etiquette -> destinationGuidance
+6. If user is asking for airport facilities such as restaurants, lounges, play areas or shopping -> airportAmenities
+7. If user is asking about customs, immigration, meeting points or arriving at destination -> arrivalAssistance
+8. If user mentions a specific flight and asks status -> flightStatus
+9. If user wants to find available flights -> searchFlights
+10. If user wants to book but has not chosen a flight -> searchFlights,
+    with high confidence, even if origin, destination and date are missing.
 
 When a message matches multiple intents, choose the MOST SPECIFIC intent rather than the more general one.
 """
+            },
+            {
+              // Sent separately from the instruction prompt because it is the
+              // only part that changes between calls — the rest of the system
+              // prompt stays byte-identical and cacheable.
+              "role": "system",
+              "content": AppDate.promptContext,
             },
             {
               "role": "user",
@@ -648,7 +1029,7 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
           ],
           "temperature": 0,
         }),
-      );
+      ).timeout(_classifyBudget);
 
       if (response.statusCode != 200) {
         throw Exception(
@@ -672,7 +1053,7 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
       jsonDecode(cleanedContent) as Map<String, dynamic>;
 
       return IntentResult(
-          originalMessage: input,
+        originalMessage: input,
         type: _parseIntent(
           result['action']?.toString(),
         ),
@@ -693,10 +1074,15 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
     } catch (e) {
       print('QueryUnderstandingService Error: $e');
 
+      // Flagged rather than reported as a low-confidence `unknown`: the
+      // message was never classified, so nothing here justifies telling the
+      // passenger their wording was unclear. The caller passes these straight
+      // to the TravelBuddy backend, which routes them itself.
       return  IntentResult(
-        type: IntentType.unknown,
-        confidence: 0.0,
-          originalMessage: input
+          type: IntentType.unknown,
+          confidence: 0.0,
+          originalMessage: input,
+          classifierFailed: true,
       );
     }
   }
@@ -742,6 +1128,9 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
       case 'tripRecommendation':
         return IntentType.tripRecommendation;
 
+      case 'wallet':
+        return IntentType.wallet;
+
       case 'travelDocuments':
         return IntentType.travelDocuments;
 
@@ -768,6 +1157,8 @@ When a message matches multiple intents, choose the MOST SPECIFIC intent rather 
 
       case 'tripManagement':
         return IntentType.tripManagement;
+      case 'bookFlight':
+        return IntentType.bookFlight;
 
       default:
         return IntentType.unknown;

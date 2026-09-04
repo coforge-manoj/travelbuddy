@@ -104,6 +104,11 @@ unlinked_spec.ds
 **/linux/flutter/generated_plugin_registrant.h
 **/linux/flutter/generated_plugins.cmake
 
+# Secrets. `.env` is a declared Flutter asset (see pubspec.yaml), so a fresh
+# clone must `cp .env.example .env` before the app will build — the asset
+# bundler fails on a missing explicit asset even though dotenv.load is optional.
+.env
+
 # Coverage
 coverage/
 

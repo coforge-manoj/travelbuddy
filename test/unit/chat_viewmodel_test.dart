@@ -3,14 +3,9 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:ai_travel_assistant/core/errors/failures.dart';
 import 'package:ai_travel_assistant/core/utils/result.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/intent.dart';
-import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/book_flight_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/change_seat_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/chat_history_usecases.dart';
@@ -84,7 +79,8 @@ void main() {
     agentRepository = MockAgentRepository();
     historyRepository = MockChatHistoryRepository();
 
-    when(() => historyRepository.clearHistory()).thenAnswer((_) async => const Result.success(null));
+    when(() => historyRepository.clearHistory())
+        .thenAnswer((_) async => const Result.success(null));
     when(() => historyRepository.saveMessage(any()))
         .thenAnswer((_) async => const Result.success(null));
     when(
@@ -116,201 +112,49 @@ void main() {
       setPendingNextScenarioId: (_) {},
     );
 
-    // Let the constructor's initial session-start sequence (welcome message
-    // + flight-offer search) fully settle before each test's own actions.
+    // Let the constructor's initial session-start sequence settle before each
+    // test's own actions.
     await pumpEventQueue();
   });
 
-  test('a new session starts with a welcome message and flight-offer suggestions', () {
-    expect(viewModel.state.messages, hasLength(2));
-    expect(viewModel.state.messages.first.text, contains('Hello'));
-    expect(viewModel.state.messages.last.type, ChatMessageType.flightOffersCard);
-    expect(viewModel.state.messages.last.payload, sampleOffers);
+  test('a new session starts with a welcome message and nothing else', () {
+    // Flight options used to be searched and shown proactively here. They are
+    // not any more — they only appear once the passenger asks to book — so a
+    // fresh session is exactly one bubble.
+    expect(viewModel.state.messages, hasLength(1));
+    final welcome = viewModel.state.messages.single;
+    expect(welcome.role, ChatRole.assistant);
+    expect(welcome.type, ChatMessageType.text);
+    expect(welcome.text, contains('Elena'));
+    expect(viewModel.unspokenOpening, welcome.text);
     verify(() => historyRepository.clearHistory()).called(1);
-  });
-
-  test('selecting a flight offer books it and starts the guided seat/baggage flow', () async {
-    final booking = Booking(
-      pnr: 'TB123456',
-      passengerName: 'Joe Traveler',
-      flight: Flight(
-        flightNumber: 'UA482',
-        origin: 'EWR',
-        destination: 'ORD',
-        status: FlightStatus.scheduled,
-        scheduledDeparture: DateTime(2026, 1, 2, 6, 45),
+    verifyNever(
+      () => flightRepository.searchFlights(
+        origin: any(named: 'origin'),
+        destination: any(named: 'destination'),
       ),
     );
-    when(
-      () => flightRepository.bookFlight(
-        offerId: any(named: 'offerId'),
-        passengerName: any(named: 'passengerName'),
-      ),
-    ).thenAnswer((_) async => Result.success(booking));
-    const seatMap = SeatMap(flightNumber: 'UA482', rows: 1, seats: []);
-    when(() => seatRepository.getSeatMap(any()))
-        .thenAnswer((_) async => const Result.success(seatMap));
-
-    await viewModel.selectFlightOffer('UA482');
-    await pumpEventQueue();
-
-    expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
-    expect(viewModel.state.messages.last.payload, seatMap);
-    expect(viewModel.state.pendingBooking, booking);
   });
 
-  test(
-    'the guided flow ends with a complete itinerary card including terminal info',
-    () async {
-      final flight = Flight(
-        flightNumber: 'UA482',
-        origin: 'EWR',
-        destination: 'ORD',
-        status: FlightStatus.scheduled,
-        scheduledDeparture: DateTime(2026, 1, 2, 6, 45),
-        gate: 'B12',
-        terminal: '2',
-        checkInCounter: '14-18',
-        boardingTime: DateTime(2026, 1, 2, 6, 5),
-      );
-      final booking = Booking(pnr: 'TB123456', passengerName: 'Joe Traveler', flight: flight);
-      when(
-        () => flightRepository.bookFlight(
-          offerId: any(named: 'offerId'),
-          passengerName: any(named: 'passengerName'),
-        ),
-      ).thenAnswer((_) async => Result.success(booking));
-      const seatMap = SeatMap(
-        flightNumber: 'UA482',
-        rows: 1,
-        seats: [
-          Seat(
-            seatNumber: '14A',
-            row: 14,
-            column: 'A',
-            type: SeatType.window,
-            availability: SeatAvailability.available,
-            priceDelta: 15,
-          ),
-        ],
-      );
-      when(() => seatRepository.getSeatMap(any()))
-          .thenAnswer((_) async => const Result.success(seatMap));
-      const seat = Seat(
-        seatNumber: '14A',
-        row: 14,
-        column: 'A',
-        type: SeatType.window,
-        availability: SeatAvailability.selected,
-        priceDelta: 15,
-      );
-      when(
-        () => seatRepository.changeSeat(
-          pnr: any(named: 'pnr'),
-          flightNumber: any(named: 'flightNumber'),
-          seatNumber: any(named: 'seatNumber'),
-        ),
-      ).thenAnswer((_) async => const Result.success(seat));
-      const options = [BaggageOption(id: 'bag_10kg', extraWeightKg: 10, price: 45)];
-      when(() => baggageRepository.getBaggageOptions(any()))
-          .thenAnswer((_) async => const Result.success(options));
-      const purchase = BaggagePurchase(
-        id: 'purchase_1',
-        option: BaggageOption(id: 'bag_10kg', extraWeightKg: 10, price: 45),
-        status: BaggagePurchaseStatus.success,
-        confirmationCode: 'BG12345',
-      );
-      when(
-        () => baggageRepository.purchaseBaggage(
-          pnr: any(named: 'pnr'),
-          optionId: any(named: 'optionId'),
-        ),
-      ).thenAnswer((_) async => const Result.success(purchase));
-
-      await viewModel.selectFlightOffer('UA482');
-      await pumpEventQueue();
-      expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
-
-      await viewModel.confirmSeatChange('14A');
-      await pumpEventQueue();
-      expect(viewModel.state.messages.last.type, ChatMessageType.baggageOptionsCard);
-      expect(viewModel.state.pendingSeatNumber, '14A');
-
-      await viewModel.confirmBaggagePurchase('bag_10kg');
-      await pumpEventQueue();
-      expect(viewModel.state.messages.last.type, ChatMessageType.baggageSuccessCard);
-      expect(viewModel.state.pendingBaggagePurchases, [purchase]);
-
-      await viewModel.finishBooking();
-      await pumpEventQueue();
-
-      final finalMessage = viewModel.state.messages.last;
-      expect(finalMessage.type, ChatMessageType.bookingConfirmationCard);
-      final summary = finalMessage.payload! as BookingSummary;
-      expect(summary.booking, booking);
-      expect(summary.seatNumber, '14A');
-      expect(summary.extraBaggageKg, 10);
-      expect(summary.booking.flight.terminal, '2');
-      expect(summary.booking.flight.gate, 'B12');
-      expect(viewModel.state.pendingBooking, isNull);
-    },
-  );
-
-  test('seat-selection intent renders a seat map card', () async {
+  test('low-confidence intent offers human escalation instead of guessing',
+      () async {
     when(() => chatRepository.classifyIntent(any())).thenAnswer(
-      (_) async =>
-          const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.95)),
-    );
-    const seatMap = SeatMap(flightNumber: 'FZ123', rows: 1, seats: []);
-    when(() => seatRepository.getSeatMap(any()))
-        .thenAnswer((_) async => const Result.success(seatMap));
-
-    await viewModel.sendMessage('I want a window seat');
-    await pumpEventQueue();
-
-    expect(viewModel.state.messages.last.type, ChatMessageType.seatMapCard);
-    expect(viewModel.state.messages.last.payload, seatMap);
-  });
-
-  test('low-confidence intent offers human escalation instead of guessing', () async {
-    when(() => chatRepository.classifyIntent(any())).thenAnswer(
-      (_) async =>
-          const Result.success(IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
+      (_) async => const Result.success(
+          IntentResult(type: IntentType.seatSelection, confidence: 0.1)),
     );
 
     await viewModel.sendMessage('uhh something about my thing');
     await pumpEventQueue();
 
-    expect(viewModel.state.messages.last.text, contains('customer support agent'));
+    expect(
+        viewModel.state.messages.last.text, contains('customer support agent'));
     verifyNever(() => seatRepository.getSeatMap(any()));
-  });
-
-  test('baggage purchase confirmation renders a success card', () async {
-    const option = BaggageOption(id: 'bag_10kg', extraWeightKg: 10, price: 45);
-    const purchase = BaggagePurchase(
-      id: 'purchase_1',
-      option: option,
-      status: BaggagePurchaseStatus.success,
-      confirmationCode: 'BG12345',
-    );
-    when(
-      () => baggageRepository.purchaseBaggage(
-        pnr: any(named: 'pnr'),
-        optionId: any(named: 'optionId'),
-      ),
-    ).thenAnswer((_) async => const Result.success(purchase));
-
-    await viewModel.confirmBaggagePurchase('bag_10kg');
-    await pumpEventQueue();
-
-    expect(viewModel.state.messages.last.type, ChatMessageType.baggageSuccessCard);
-    expect(viewModel.state.messages.last.payload, purchase);
   });
 
   test('a repository failure surfaces as an inline error message', () async {
     when(() => chatRepository.classifyIntent(any())).thenAnswer(
-      (_) async =>
-          const Result.success(IntentResult(type: IntentType.flightStatus, confidence: 0.9)),
+      (_) async => const Result.success(
+          IntentResult(type: IntentType.flightStatus, confidence: 0.9)),
     );
     when(() => flightRepository.getFlightStatus(any()))
         .thenAnswer((_) async => const Result.failure(NetworkFailure()));

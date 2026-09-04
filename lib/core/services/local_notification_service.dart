@@ -21,10 +21,18 @@ class LocalNotificationService {
   static const _channelId = 'journey_concierge_reminders';
   static const _channelName = 'Journey Concierge';
 
+  /// Prefix marking a payload as a *live* backend moment rather than a
+  /// scripted `ProactiveScenario.id`. The text after it is the opening line
+  /// to seed the chat with, so the copy survives the round-trip through the
+  /// OS without a second fetch on tap.
+  static const liveMomentPayloadPrefix = 'live:';
+
   /// Set once by the app shell after its `Navigator` is ready — invoked with
-  /// the tapped notification's payload (a `ProactiveScenario.id`) so the app
-  /// can open the chat and resume with that use case.
-  void Function(String scenarioId)? onScenarioTapped;
+  /// the tapped notification's payload so the app can open the chat.
+  ///
+  /// A payload starting with [liveMomentPayloadPrefix] carries backend copy;
+  /// anything else is a `ProactiveScenario.id` from the scripted catalogue.
+  void Function(String payload)? onScenarioTapped;
 
   Future<void> initialize() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');

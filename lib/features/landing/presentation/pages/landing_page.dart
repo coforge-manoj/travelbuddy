@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:ai_travel_assistant/core/services/active_account_store.dart';
 import 'package:ai_travel_assistant/core/services/concierge_visibility_store.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/routes/ai_travel_assistant_routes.dart';
 import 'package:ai_travel_assistant/features/concierge_demo/presentation/pages/scenario_chat_page.dart';
@@ -17,7 +18,7 @@ const _veloAccentRed = Color(0xFFFF5C44);
 class LandingPage extends ConsumerWidget {
   const LandingPage({super.key});
 
-  static const _heroImageUrl = 'assets/images/LandingPage_BG.png';
+  static const _heroImageUrl = 'assets/images/LandingPage_BG.webp';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,7 +42,9 @@ class LandingPage extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const SizedBox(height: 20),
-                          const _GreetingHeader(name: 'Joe'),
+                          _GreetingHeader(
+                            name: ref.watch(activeAccountProvider).firstName,
+                          ),
                           const SizedBox(height: 16),
                           const _VeloSkyPassCard(),
                           const SizedBox(height: 16),
@@ -114,7 +117,7 @@ class _HeroSection extends StatelessWidget {
       height: 330,
       width: double.infinity,
       child: Stack(
-        fit: StackFit.expand,
+        fit: StackFit.loose,
         children: [
           Image.asset(
             imageUrl,
@@ -184,6 +187,8 @@ class _HeroIconButton extends StatelessWidget {
   }
 }
 
+/// Greets whichever demo member is signed in — the passenger is switched
+/// from the More tab, not from here.
 class _GreetingHeader extends StatelessWidget {
   const _GreetingHeader({required this.name});
 
@@ -465,7 +470,7 @@ class _PromoCarousel extends StatelessWidget {
       title: 'Turn everyday spending into unforgettable journeys',
       body:
           'Earn up to 20,000 VeloMiles and unlock exclusive travel rewards. Limited-time offer.',
-      imagePath: 'assets/images/Promo1.png',
+      imagePath: 'assets/images/Promo1.webp',
       colors: [Color(0xFF6B5643), Color(0xFF2E2A26)],
     ),
     (

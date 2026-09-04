@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../features/ai_travel_assistant/domain/entities/intent.dart';
+import '../../../utils/app_date.dart';
 import '../ai_json_parser.dart';
 import 'conversation_router_result.dart';
 import 'conversational_route_promt.dart' show ConversationRouterPrompt;
@@ -26,37 +27,38 @@ class ConversationRouterService {
     required String assistantMessage,
     required String userMessage,
     required Map<String, dynamic> context,
+    String? stageHint,
   }) async {
     try {
+      final routerInput = <String, dynamic>{
+        "currentIntent": activeIntent.name,
+        "currentContext": context,
+        if (stageHint != null && stageHint.isNotEmpty)
+          "currentJourneyStage": stageHint,
+        "previousAssistantMessage": assistantMessage,
+        "latestUserMessage": userMessage,
+      };
+
       final messages = <Map<String, String>>[
         {
           "role": "system",
           "content": ConversationRouterPrompt.systemPrompt,
         },
         {
+          // The router writes the normalizedPrompt that reaches the backend,
+          // so it needs the same date grounding the classifier has — "make it
+          // tomorrow instead" arrives here, not there.
           "role": "system",
-          "content":
-          "Current Active Intent:\n${activeIntent.name}",
+          "content": AppDate.promptContext,
+        },
+        {
+          "role": "user",
+          "content": jsonEncode(routerInput),
         },
       ];
 
-      if (context.isNotEmpty) {
-        messages.add({
-          "role": "system",
-          "content":
-          "Current Context:\n${jsonEncode(context)}",
-        });
-      }
-
-      messages.add({
-        "role": "assistant",
-        "content": assistantMessage,
-      });
-
-      messages.add({
-        "role": "user",
-        "content": userMessage,
-      });
+      print("===== ROUTER INPUT =====");
+      print(const JsonEncoder.withIndent('  ').convert(routerInput));
 
       final response = await http.post(
         Uri.parse(_apiUrl),
@@ -79,18 +81,20 @@ class ConversationRouterService {
       jsonDecode(response.body) as Map<String, dynamic>;
 
       final content =
-      body["choices"][0]["message"]["content"]
-          .toString();
+      body["choices"][0]["message"]["content"].toString();
 
       print("=== ROUTER RESPONSE ===");
       print(content);
 
       final json = AiJsonParser.parseObject(content);
+
       print("ROUTER PARSED");
+
       return ConversationRouterResult.fromJson(json);
-    } catch (e) {
+    } catch (e, stackTrace) {
       print("ConversationRouterService Error");
       print(e);
+      print(stackTrace);
 
       return const ConversationRouterResult(
         continueConversation: false,

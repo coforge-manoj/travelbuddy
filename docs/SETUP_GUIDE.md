@@ -1,5 +1,21 @@
 # Setup Guide
 
+## 0. Create your `.env`
+
+```bash
+cp .env.example .env
+```
+
+`.env` holds API keys and is git-ignored, so it is **not** in a fresh clone. It
+is also a declared Flutter asset (`pubspec.yaml`), which means the file has to
+exist before the app will build — the asset bundler fails on a missing explicit
+asset even though `dotenv.load` is called with `isOptional: true`. Copying the
+example is enough to build; fill in values only for the features you need.
+
+Blank values degrade rather than crash: without `CARTESIA_API_KEY` the assistant
+falls back to the on-device TTS voice, and without `API_URL`/`API_KEY` the
+speech summarizer falls back to its offline path.
+
 ## 1. Install dependencies and generate code
 
 ```bash

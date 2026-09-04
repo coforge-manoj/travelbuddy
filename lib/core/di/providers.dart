@@ -35,6 +35,12 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/purchase_baggage_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/search_flights_usecase.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/usecases/send_message_usecase.dart';
+import 'package:ai_travel_assistant/core/services/ai_services/speech_summary/speech_summary_service.dart';
+import 'package:ai_travel_assistant/core/services/tts_engine_setting_store.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/cartesia_speech_synthesizer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_summarizer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/speech_synthesizer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/services/tts/system_speech_synthesizer.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/services/voice_service.dart';
 
 /// Toggle between the real Dio-backed data sources and the in-memory mocks.
@@ -54,10 +60,48 @@ final dioProvider = Provider<Dio>((ref) {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Voice output
+// ---------------------------------------------------------------------------
+
+/// Rewrites on-screen replies into the shorter line we speak. Swap for
+/// `FallbackSpeechSummarizer()` to take the LLM out of the speech path.
+final speechSummarizerProvider = Provider<SpeechSummarizer>((ref) {
+  return SpeechSummaryService();
+});
+
+/// On-device engine. Also serves as the automatic fallback whenever Cartesia
+/// synthesis fails, so it is always constructed.
+final systemSpeechSynthesizerProvider = Provider<SpeechSynthesizer>((ref) {
+  final synthesizer = SystemSpeechSynthesizer();
+  ref.onDispose(synthesizer.dispose);
+  return synthesizer;
+});
+
+/// Typed concretely so `voiceServiceProvider` can reach `warmUp`.
+final cartesiaSpeechSynthesizerProvider =
+    Provider<CartesiaSpeechSynthesizer>((ref) {
+  final synthesizer = CartesiaSpeechSynthesizer();
+  ref.onDispose(synthesizer.dispose);
+  return synthesizer;
+});
+
 /// Wraps speech-to-text + text-to-speech for Phase 11's voice integration.
 /// Disposed automatically when the provider scope is torn down.
+///
+/// The engine and summarization settings are read through callbacks rather
+/// than watched, so toggling them in the More tab applies to the next spoken
+/// reply without rebuilding the service (and dropping in-flight audio).
 final voiceServiceProvider = Provider<VoiceService>((ref) {
-  final service = VoiceService();
+  final cartesia = ref.watch(cartesiaSpeechSynthesizerProvider);
+  final service = VoiceService(
+    systemSynthesizer: ref.watch(systemSpeechSynthesizerProvider),
+    neuralSynthesizer: cartesia,
+    summarizer: ref.watch(speechSummarizerProvider),
+    engine: () => ref.read(ttsEngineProvider),
+    summaryEnabled: () => ref.read(speechSummaryEnabledProvider),
+    warmUpEngine: cartesia.warmUp,
+  );
   ref.onDispose(service.dispose);
   return service;
 });

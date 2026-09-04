@@ -5,18 +5,43 @@ import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/agent_escalation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/airport_info.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/baggage.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/basket.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/boarding_pass.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_confirmation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/cabin_seat_map.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/cancellation.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/chat_message.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/document_check.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/extras_catalogue.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_offer.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/flight_selection.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/member_wallet.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/seat_confirmation.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/travel_history.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/upgrade_quote.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/viewmodels/chat_viewmodel.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/action_summary_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/airport/airport_info_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_options_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/baggage/baggage_success_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/basket_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/boarding_pass_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmation_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/booking_confirmed_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/cancellation_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/document_check_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/extras_list_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_offers_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_selected_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/flight_status_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/member_wallet_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/travel_history_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/flight/upgrade_quote_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/cabin_seat_map_card.dart';
+import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/seat_confirmed_card.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/presentation/widgets/seat_map/seat_map_card.dart';
 
 /// Dispatches a rich [ChatMessage] to its dedicated card widget based on
@@ -36,6 +61,8 @@ class RichCardWidget extends ConsumerWidget {
       ChatMessageType.flightStatusCard => FlightStatusCard(flight: message.payload! as Flight),
       ChatMessageType.flightOffersCard =>
         FlightOffersCard(offers: message.payload! as List<FlightOffer>),
+      ChatMessageType.flightSelectedCard =>
+        FlightSelectedCard(selection: message.payload! as FlightSelection),
       ChatMessageType.bookingConfirmationCard =>
         BookingConfirmationCard(summary: message.payload! as BookingSummary),
       ChatMessageType.seatMapCard => SeatMapCard(seatMap: message.payload! as SeatMap),
@@ -50,6 +77,39 @@ class RichCardWidget extends ConsumerWidget {
         ),
       ChatMessageType.actionSummaryCard =>
         ActionSummaryCard(summary: message.payload! as ActionSummary),
+
+      // TravelBuddy journey cards. The interactive ones send their tap back
+      // through `/chat` as a sentence, so a tap and a typed message reach
+      // the backend the same way — see [ChatViewModel].
+      ChatMessageType.basketCard => BasketCard(basket: message.payload! as Basket),
+      ChatMessageType.extrasListCard => ExtrasListCard(
+          catalogue: message.payload! as ExtrasCatalogue,
+          onAdd: ref.read(chatViewModelProvider.notifier).addExtra,
+        ),
+      ChatMessageType.bookingConfirmedCard => BookingConfirmedCard(
+          booking: message.payload! as BookingConfirmation,
+        ),
+      ChatMessageType.cabinSeatMapCard => CabinSeatMapCard(
+          seatMap: message.payload! as CabinSeatMap,
+          onSeatSelected: ref.read(chatViewModelProvider.notifier).selectSeat,
+        ),
+      ChatMessageType.seatConfirmedCard =>
+        SeatConfirmedCard(confirmation: message.payload! as SeatConfirmation),
+      ChatMessageType.boardingPassCard =>
+        BoardingPassCard(pass: message.payload! as BoardingPass),
+      ChatMessageType.upgradeQuoteCard =>
+        UpgradeQuoteCard(quote: message.payload! as UpgradeQuote),
+      ChatMessageType.cancellationCard =>
+        CancellationCard(cancellation: message.payload! as Cancellation),
+      ChatMessageType.travelHistoryCard =>
+        TravelHistoryCard(history: message.payload! as TravelHistory),
+
+      ChatMessageType.memberWalletCard =>
+        MemberWalletCard(wallet: message.payload! as MemberWallet),
+
+      ChatMessageType.documentCheckCard =>
+        DocumentCheckCard(check: message.payload! as DocumentCheck),
+
       ChatMessageType.text || ChatMessageType.error =>
         _AgentEscalationCard(escalation: null, text: message.text),
     };

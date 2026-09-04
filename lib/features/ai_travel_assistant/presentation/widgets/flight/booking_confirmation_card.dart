@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:ai_travel_assistant/core/utils/app_date.dart';
 import 'package:ai_travel_assistant/features/ai_travel_assistant/domain/entities/booking_summary.dart';
 
 /// Final itinerary card shown once [ChatViewModel.finishBooking] completes
@@ -18,7 +19,6 @@ class BookingConfirmationCard extends StatelessWidget {
     final onColor = scheme.onPrimaryContainer;
     final booking = summary.booking;
     final flight = booking.flight;
-    final dateFormat = DateFormat('EEE, MMM d · HH:mm');
     final timeFormat = DateFormat.Hm();
 
     Widget stat(String label, String value) {
@@ -75,7 +75,7 @@ class BookingConfirmationCard extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              dateFormat.format(flight.scheduledDeparture),
+              AppDate.formatWithTime(flight.scheduledDeparture),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: onColor),
             ),
             const SizedBox(height: 6),

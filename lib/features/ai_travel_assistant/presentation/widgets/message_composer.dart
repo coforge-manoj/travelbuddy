@@ -8,12 +8,25 @@ class MessageComposer extends StatefulWidget {
     super.key,
     required this.onSend,
     required this.onMicPressed,
+    this.onAudioModePressed,
     this.isListening = false,
     this.enabled = true,
   });
 
   final ValueChanged<String> onSend;
   final VoidCallback onMicPressed;
+
+  /// Opens the hands-free conversation, as a leading icon on the field.
+  ///
+  /// Distinct from [onMicPressed], which stays exactly as it was: the trailing
+  /// mic dictates one message, this one starts a conversation that keeps
+  /// listening on its own.
+  ///
+  /// Nullable, and the icon only appears when it is set — the concierge demo
+  /// shares this composer and has no audio mode, so it simply doesn't pass one
+  /// rather than being given a button that does nothing.
+  final VoidCallback? onAudioModePressed;
+
   final bool isListening;
   final bool enabled;
 
@@ -85,7 +98,21 @@ class _MessageComposerState extends State<MessageComposer> {
                     borderRadius: BorderRadius.circular(28),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  // Tightened from 20 because the leading icon already insets
+                  // the text; at 20 the hint sat too far from the field edge.
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: widget.onAudioModePressed == null ? 20 : 8,
+                    vertical: 12,
+                  ),
+                  prefixIcon: widget.onAudioModePressed == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Voice mode',
+                          onPressed: widget.enabled
+                              ? widget.onAudioModePressed
+                              : null,
+                          icon: const Icon(Icons.graphic_eq, color: _brandBlue),
+                        ),
                   suffixIcon: IconButton(
                     tooltip: _hasText
                         ? 'Send'

@@ -10,10 +10,16 @@ class AiTravelAssistantEntryPoint {
 
   static const routeName = '/ai-travel-assistant';
 
-  static Route<void> route({String? autoStartScenarioId}) {
+  static Route<void> route({
+    String? autoStartScenarioId,
+    String? openingLine,
+  }) {
     return MaterialPageRoute<void>(
       settings: const RouteSettings(name: routeName),
-      builder: (_) => ChatPage(autoStartScenarioId: autoStartScenarioId),
+      builder: (_) => ChatPage(
+        autoStartScenarioId: autoStartScenarioId,
+        openingLine: openingLine,
+      ),
     );
   }
 }
